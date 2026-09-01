@@ -19,11 +19,21 @@ from typing import Any
 
 from . import SUITE_ROOT
 
-# folder relative to the suite root -> importable entry point
+# The discipline tree the New calculation chooser is grouped by. Many more
+# modules are coming, so the branches are declared once here and a module simply
+# names the one it belongs to.
+CATEGORIES: list[str] = [
+    "Load Calculations", "Timber", "Insitu Concrete", "Precast Concrete",
+    "Temporary Works", "Steel", "Glass", "Fibres", "Composite", "Foundations",
+    "Retaining wall", "Analysis", "General",
+]
+
+# folder relative to the suite root -> importable entry point, and the branch of
+# the tree the module is filed under when it does not declare its own.
 SOURCES: list[dict[str, str]] = [
-    {"folder": "SteelMemberDesign", "entry": "smd.headless"},
-    {"folder": "ConcreteColumnDesign", "entry": "ccd.headless"},
-    {"folder": "CalculationPad", "entry": "cpd.headless"},
+    {"folder": "SteelMemberDesign", "entry": "smd.headless", "category": "Steel"},
+    {"folder": "ConcreteColumnDesign", "entry": "ccd.headless", "category": "Insitu Concrete"},
+    {"folder": "CalculationPad", "entry": "cpd.headless", "category": "General"},
 ]
 
 REQUIRED = ("descriptor", "schema", "defaults", "compute", "render", "summarise", "identity")
@@ -39,6 +49,8 @@ class Module:
         self.adapter = adapter
         self.descriptor = dict(adapter.descriptor())
         self.descriptor.setdefault("id", self.entry)
+        # A module may declare its own branch; otherwise the registry files it.
+        self.descriptor.setdefault("category", source.get("category", "General"))
         self.id = self.descriptor["id"]
 
     def has(self, name: str) -> bool:

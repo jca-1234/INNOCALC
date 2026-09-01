@@ -40,13 +40,14 @@
   <select id="projectSelect" title="Your projects"><option value="">No project open</option></select>
   <button id="projectsButton" type="button" title="Manage projects">Projects&hellip;</button>
   <nav>
-    <button id="navLibrary" class="active">Library</button>
+    <button id="navLibrary" class="active">Calculation Index</button>
     <button id="navCalculation">Calculation</button>
     <button id="navPackage">Package Export</button>
     <button id="navQa">Verification</button>
   </nav>
   <span id="moduleBadge"></span>
   <span class="spacer"></span>
+  <span id="saveState" class="save-state"></span>
   <span class="dirty-dot" title="Unsaved changes"></span>
   <button id="saveCalculation" class="primary calc-action" hidden>SAVE</button>
   <button id="versionsButton" type="button">Versions</button>
@@ -56,21 +57,24 @@
 <!-- ------------------------------------------------------------------ library -->
 <section id="libraryView" class="view">
   <div class="view-head">
-    <h1>Calculation Library</h1>
+    <h1>Calculation Index</h1>
     <div class="row-actions">
       <button id="newCalculation" class="primary">New calculation</button>
-      <button id="adoptExisting" type="button" title="Index calculations filed by the standalone tools">Import existing</button>
+      <button id="importPdf" type="button" title="Index a calculation prepared in other software">Import PDF calculation</button>
+      <button id="adoptExisting" type="button" title="Index calculations filed by the standalone tools">Adopt existing</button>
       <button id="refreshLibrary" type="button">Refresh</button>
     </div>
   </div>
   <div class="card">
     <div class="filters">
-      <label>Search<input id="librarySearch" type="search" placeholder="member, package, level, check&hellip;"></label>
-      <label>Package<select id="libraryPackage"><option value="">All</option></select></label>
-      <label>Level<select id="libraryLevel"><option value="">All</option></select></label>
-      <label>Module<select id="libraryModule"><option value="">All</option></select></label>
-      <label>Calculation type<select id="libraryCalcType"><option value="">All</option></select></label>
+      <label>Search<input id="librarySearch" type="search" placeholder="member, package, level, description, check&hellip;"></label>
+      <div class="multi" id="libraryPackage"></div>
+      <div class="multi" id="libraryLevel"></div>
+      <div class="multi" id="libraryModule"></div>
+      <div class="multi" id="libraryCalcType"></div>
+      <label>Sort by<select id="librarySort"></select></label>
       <label class="check" style="flex-direction:row;align-items:center;gap:6px"><input id="libraryShowSuperseded" type="checkbox"> Show superseded</label>
+      <button id="libraryClear" type="button">Clear filters</button>
     </div>
   </div>
   <div class="card"><div id="libraryTable"><p class="empty-state">Open a project to see its calculations.</p></div></div>
@@ -80,6 +84,7 @@
 <div id="calculationView" class="workspace" hidden>
   <aside class="navigator">
     <div class="nav-title"><b>Project Calculations</b><button id="refreshTree" title="Refresh">&#8635;</button></div>
+    <button id="newCalculationCalc" class="primary block" type="button">New calculation</button>
     <div id="calcTree" class="tree"><p class="muted">Open a project to load calculations.</p></div>
   </aside>
   <aside class="inputs" id="inputPanel">
@@ -94,8 +99,9 @@
         <label>Level<input id="idLevel" list="idLevels" placeholder="e.g. L02"></label>
         <datalist id="idLevels"></datalist>
         <label class="wide">Subject<input id="idSubject"></label>
-        <label>Checked by<input id="idChecker" maxlength="12"></label>
+        <label>Checked by<input id="idChecker" readonly tabindex="-1" placeholder="Set on verification" title="Written when the verifier closes the verification out"></label>
         <label>Designer<input id="idDesigner" maxlength="4"></label>
+        <label class="wide">Description<input id="idDescription" placeholder="Searchable description of this calculation"></label>
       </div>
     </details>
     <div id="schemaGroups"></div>
@@ -129,12 +135,23 @@
     </div>
   </div>
   <div class="card">
-    <div class="two-col">
-      <label>Package title<input id="pkgTitle" placeholder="Structural calculations - Stage 1"></label>
-      <label>Drawing review set (PDF)<span class="row-actions"><input id="pkgDrawings" placeholder="Optional combined drawing PDF"><button id="pkgPickDrawings" type="button">Browse</button></span></label>
+    <div class="issue-row">
+      <label class="grow-3">Package title<input id="pkgTitle" placeholder="Structural calculations - Stage 1 - superstructure to level 12" maxlength="120"></label>
+      <label class="grow-1">Reason for issue<input id="pkgReason" list="pkgReasons" placeholder="Internal Review"></label>
+      <datalist id="pkgReasons">
+        <option>Internal Review</option><option>Verification</option><option>Certification</option>
+        <option>Preliminary Check</option><option>Status Print</option>
+      </datalist>
+      <label class="grow-1">Issue to<select id="pkgReviewer"></select></label>
+      <label class="grow-2">Drawing review set (PDF)<span class="row-actions">
+        <input id="pkgDrawings" placeholder="Optional combined drawing PDF"><button id="pkgPickDrawings" type="button">Browse</button></span></label>
     </div>
   </div>
   <div class="card"><div id="packageTable"><p class="empty-state">Open a project to build a package.</p></div></div>
+  <div class="card">
+    <h2>Issue register</h2>
+    <div id="issueRegister"><p class="empty-state">No packages issued from this project yet.</p></div>
+  </div>
 </section>
 
 <!-- ---------------------------------------------------------------- verification -->
@@ -159,7 +176,7 @@
   <h1>Projects</h1>
   <h2>Open a project</h2>
   <div class="filters">
-    <label>Project number<input id="findCode" placeholder="J3657" maxlength="12"></label>
+    <label class="grow-2">Project number or name<input id="findCode" type="search" placeholder="J3657, or part of the client or project name" maxlength="80"></label>
     <button id="findButton" type="button">Find</button>
     <button id="rescanButton" type="button" title="Rebuild the project folder index in the background">Rescan drive</button>
     <span id="discoveryStatus" class="muted"></span>
@@ -167,12 +184,14 @@
   <div id="findResults"></div>
   <div class="scroll-box" id="projectList"></div>
   <h2>Add or create a project</h2>
+  <p class="muted">Type the project number and the folder, client reference and project name are
+  filled in for you. The project folder and the Innovis sub-folders are created automatically
+  if they do not exist; a folder chosen below the project's own level reverts to the top of the project.</p>
   <div class="two-col">
     <label class="wide">Project folder<span class="row-actions"><input id="newProjectPath" placeholder="J:\Active Projects\J3601 to J3700\J3657 - ABC - Warehouse"><button id="pickFolder" type="button">Browse</button></span></label>
     <label>Project number<input id="newProjectCode" placeholder="J3657"></label>
     <label>Client reference<input id="newProjectClient"></label>
     <label class="wide">Project name<input id="newProjectName"></label>
-    <label class="check"><input id="newProjectCreate" type="checkbox"> Create the folder and Innovis sub-folders if they do not exist</label>
   </div>
   <p id="projectsError" class="error"></p>
   <div class="actions"><button id="addProject" class="primary" type="button">Add project</button><button data-close type="button">Close</button></div>
@@ -182,8 +201,32 @@
   <button class="close" data-close type="button">&times;</button>
   <h1>New calculation</h1>
   <p class="muted">Choose the calculation module. Each module supplies its own inputs, calculations and presentation.</p>
-  <div id="moduleCards" class="module-cards"></div>
+  <label class="module-search">Search<input id="moduleSearch" type="search" placeholder="module, standard or discipline"></label>
+  <div class="module-browser">
+    <nav id="moduleTree" class="tree"></nav>
+    <div id="moduleCards" class="module-cards"></div>
+  </div>
   <div class="actions"><button data-close type="button">Cancel</button></div>
+</div></dialog>
+
+<dialog id="importPdfDialog"><div class="dialog-body">
+  <button class="close" data-close type="button">&times;</button>
+  <h1>Import a PDF calculation</h1>
+  <p class="muted">Index a calculation prepared in other software. The PDF is copied into the
+  project's calculation folder and takes its place in the index, in packages and in verification.</p>
+  <div class="two-col">
+    <label class="wide">PDF file<span class="row-actions"><input id="importPath" placeholder="Calculation PDF"><button id="importPick" type="button">Browse</button></span></label>
+    <label>Type<input id="importType" placeholder="e.g. Raft, Frame, Connection"></label>
+    <label>Number<input id="importNumber" maxlength="12" placeholder="0001"></label>
+    <label>Package<input id="importPackage" list="idPackages"></label>
+    <label>Level<input id="importLevel" list="idLevels"></label>
+    <label>Calculation type<input id="importCalcType" placeholder="e.g. Finite element, Supplier design"></label>
+    <label>Prepared in<input id="importOrigin" placeholder="e.g. RAPT, Space Gass, supplier"></label>
+    <label class="wide">Title<input id="importTitle"></label>
+    <label class="wide">Description<input id="importDescription" placeholder="Searchable description"></label>
+  </div>
+  <p id="importError" class="error"></p>
+  <div class="actions"><button id="importCreate" class="primary" type="button">Import</button><button data-close type="button">Cancel</button></div>
 </div></dialog>
 
 <dialog id="peopleDialog"><div class="dialog-body">

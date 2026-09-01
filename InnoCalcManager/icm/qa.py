@@ -29,10 +29,14 @@ from typing import Any
 
 import calcpad
 
+from . import mail
 from . import pdf as pdf_tools
 from .library import Library, safe_name
 
 QA_ROOT = Path("06-QA") / "03-Verification"
+# Files the tool writes itself; anything else in the folder is a verifier return.
+PRODUCED = {"calculations.pdf", "verification form.pdf", "comment register.pdf",
+            "comment register - final.pdf"}
 
 STATUSES = ["Open", "Noted", "Deferred", "Closed"]
 ACTIONS = [
@@ -88,6 +92,12 @@ def folder_name(title: str, reviewer_initials: str, when: datetime | None = None
 def reference(project_code: str, sequence: int, discipline: str = "STR") -> str:
     code = re.sub(r"[^A-Za-z0-9]", "", str(project_code or "PXXXX")).upper() or "PXXXX"
     return f"{code}-{discipline}-VER-{sequence:04d}"
+
+
+def next_reference(library: Library, project: dict[str, Any], discipline: str = "STR") -> str:
+    """One sequence for everything issued from a project, so no two share a number."""
+    used = len(library.data.get("issues", [])) + len(library.data.get("qaPackages", []))
+    return reference(project.get("code", ""), used + 1, discipline)
 
 
 # ---------------------------------------------------------------------------
@@ -194,10 +204,9 @@ class QAStore:
         initials = initials_of(reviewer_initials or reviewer)
         folder = self.root / folder_name(title, initials)
         folder.mkdir(parents=True, exist_ok=True)
-        sequence = len(self.packages) + 1
         package = {
             "id": uuid.uuid4().hex[:12],
-            "ref": reference(self.project.get("code", ""), sequence),
+            "ref": next_reference(self.library, self.project),
             "rev": "01", "title": str(title).strip(),
             "reviewer": str(reviewer).strip(),
             "reviewerInitials": initials,
@@ -223,8 +232,11 @@ class QAStore:
         }
         built = collate.build_pdf(self.library, registry, selection, meta,
                                   folder / "Calculations.pdf", sort_fields=sort_fields,
-                                  drawings=drawings)
+                                  drawings=drawings, reference=package["ref"],
+                                  purpose="VERIFICATION", verifier_initials=initials)
         package["calculationPdf"] = built["pdfPath"]
+        package["drawingsPdf"] = built["drawingsPath"]
+        package["watermark"] = built["watermark"]
         package["calculationSheets"] = built["sheets"]
         package["entries"] = [{key: entry.get(key) for key in
                                ("id", "title", "package", "level", "calcType", "memberType",
@@ -241,8 +253,61 @@ class QAStore:
                     "date": str(drawing_set.get("date", package["date"]))})
         self.packages.append(package)
         self._write_documents(package)
+        package["draftEmail"] = self.draft_email(package, actor)
         self.library.write()
         return package
+
+    def draft_email(self, package: dict[str, Any], actor: dict[str, Any]) -> dict[str, Any]:
+        """Raise an unsent Outlook message to the verifier with the package links."""
+        folder = Path(package["folder"])
+        links = [("Calculations for verification", package.get("calculationPdf", "")),
+                 ("Drawings", package.get("drawingsPdf", "")),
+                 ("Verification form", str(folder / "Verification Form.html")),
+                 ("Verification package folder", str(folder))]
+        subject = (f"{self.project.get('code', '')} {self.project.get('projectName', '')} - "
+                   f"{package['ref']} - {package['title']} - for verification").strip()
+        intro = (f"{package['reviewer']}, the calculations below are issued for verification. "
+                 f"Please mark your comments on the PDF and return it to this folder; "
+                 f"the comment register picks them up automatically.")
+        try:
+            return mail.draft_for_package(
+                folder=folder, name=f"{package['ref']} - Verification request",
+                to=package.get("reviewerEmail", ""), subject=subject, intro=intro,
+                project=self.project, links=links,
+                sender=actor.get("email", ""),
+                closing=f"Prepared by {actor.get('displayName', '')}.")
+        except OSError as exc:
+            return {"path": "", "opened": False, "error": str(exc)}
+
+    def scan_returns(self, actor: dict[str, Any]) -> dict[str, Any]:
+        """Import verifier markups that have appeared in any package folder.
+
+        Verifiers return a marked-up PDF to the verification folder, so the
+        Verification tab reads those files on every refresh rather than waiting
+        for someone to remember to press Import.
+        """
+        added, scanned = 0, 0
+        for package in self.packages:
+            folder = Path(package.get("folder", ""))
+            if not folder.is_dir():
+                continue
+            ours = set(PRODUCED)
+            if package.get("drawingsPdf"):
+                ours.add(Path(package["drawingsPdf"]).name.casefold())
+            seen = {str(item).casefold() for item in package.get("scannedReturns", [])}
+            for candidate in sorted(folder.glob("*.pdf")):
+                if candidate.name.casefold() in ours:
+                    continue
+                # Name and modified time together, so a re-returned file is read again.
+                signature = f"{candidate.name}|{int(candidate.stat().st_mtime)}"
+                if signature.casefold() in seen:
+                    continue
+                scanned += 1
+                added += self.import_markups(package["id"], str(candidate), actor)["added"]
+                package.setdefault("scannedReturns", []).append(signature)
+        if scanned:
+            self.library.write()
+        return {"added": added, "scanned": scanned}
 
     # -- register -----------------------------------------------------------
     def import_markups(self, package_id: str, pdf_path: str, actor: dict[str, Any]) -> dict[str, Any]:
@@ -348,6 +413,9 @@ class QAStore:
         for comment in package["comments"]:
             if comment.get("status") == "Deferred":
                 comment["carriedInto"] = ""
+        # 'Checked by' belongs to the verifier, so it is written only now.
+        self.library.set_checker(package.get("calculations", []),
+                                 package.get("reviewerInitials", ""), package["ref"])
         self._write_documents(package)
         self.library.write()
         return package

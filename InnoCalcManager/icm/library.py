@@ -30,6 +30,9 @@ CALCULATION_ROOT = Path("09-Doc_WRK") / "01-CAL" / "10-IN_TOOL"
 INDEX_NAME = "innocalc-library.json"
 SUPERSEDED = "superseded"
 LEGACY_SUPERSEDED = "superseeded"
+# Calculations produced by other software and filed here as PDF only.
+IMPORTED = "imported-pdf"
+IMPORTED_FOLDER = "80 - IMPORTED"
 # Kept so calculations filed by the standalone steel tool are still found.
 LEGACY_ROOTS = [Path("09-Doc_WRK") / "01-CAL" / "10 - STEEL DESIGN TOOL"]
 
@@ -64,6 +67,15 @@ def _atomic_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
+def _matches(wanted: Any, value: Any) -> bool:
+    """Filter test that accepts nothing, one value or a multi-select list."""
+    if wanted is None or wanted == "" or wanted == []:
+        return True
+    allowed = wanted if isinstance(wanted, (list, tuple, set)) else [wanted]
+    allowed = [str(item) for item in allowed if str(item) != ""]
+    return not allowed or str(value or "") in allowed
+
+
 class Library:
     """Reads and writes one project's calculation index."""
 
@@ -86,6 +98,7 @@ class Library:
         self.data.setdefault("levels", [])
         self.data.setdefault("register", [])
         self.data.setdefault("qaPackages", [])
+        self.data.setdefault("issues", [])
 
     def write(self) -> None:
         with self.lock:
@@ -109,25 +122,35 @@ class Library:
     def index(self, *, show_superseded: bool = False, search: str = "",
               package: str = "", module_id: str = "", level: str = "",
               calc_type: str = "") -> dict[str, Any]:
-        """The library view the landing page renders, with filters applied."""
+        """The library view the landing page renders, with filters applied.
+
+        Every filter accepts a single value or a list, so the Calculation Index
+        can offer multi-select dropdowns without a second code path.
+        """
         needle = str(search or "").strip().casefold()
         rows = []
         for record in self.data["calculations"]:
-            if package and record.get("package") != package:
+            if not _matches(package, record.get("package")):
                 continue
-            if module_id and record.get("module") != module_id:
+            if not _matches(module_id, record.get("module")):
                 continue
-            if level and str(record.get("level") or "") != level:
+            if not _matches(level, record.get("level")):
                 continue
-            if calc_type and record.get("calcType") != calc_type:
+            if not _matches(calc_type, record.get("calcType")):
                 continue
             if needle and needle not in self._haystack(record):
                 continue
             revisions = record.get("revisions", [])
             if not show_superseded:
                 revisions = [item for item in revisions if not item.get("superseded")]
+            if not revisions and not show_superseded:
+                continue
+            latest = revisions[-1] if revisions else {}
             rows.append({**{key: value for key, value in record.items() if key != "inputs"},
                          "revisions": revisions,
+                         "superseded": bool(latest.get("superseded")),
+                         "folder": str(self.folder_of(record)),
+                         "pdfPath": str(self.pdf_of(record) or ""),
                          "revisionCount": len(record.get("revisions", []))})
         rows.sort(key=lambda item: (str(item.get("package", "")).casefold(),
                                     str(item.get("level", "")).casefold(),
@@ -144,13 +167,29 @@ class Library:
                 "memberTypes": sorted({str(item.get("memberType") or "") for item in
                                        self.data["calculations"] if item.get("memberType")},
                                       key=str.casefold),
+                "issues": list(reversed(self.data.get("issues", []))),
                 "calculations": rows, "total": len(self.data["calculations"])}
+
+    def folder_of(self, record: dict[str, Any]) -> Path:
+        """The folder the calculation's files are filed in."""
+        revisions = record.get("revisions") or []
+        if revisions:
+            return (self.root / revisions[-1].get("relativePath", "")).parent
+        return self.root / safe_name(record.get("moduleFolder", "")) / record.get("package", "")
+
+    def pdf_of(self, record: dict[str, Any]) -> Path | None:
+        revisions = record.get("revisions") or []
+        if not revisions:
+            return None
+        target = (self.root / revisions[-1].get("relativePath", "")).with_suffix(".pdf")
+        return target if target.is_file() else None
 
     @staticmethod
     def _haystack(record: dict[str, Any]) -> str:
         return " ".join(str(record.get(key, "")) for key in
                         ("memberType", "memberNumber", "package", "level", "title",
-                         "calcType", "criticalCheck", "module", "notes")).casefold()
+                         "calcType", "criticalCheck", "module", "notes",
+                         "description", "checker")).casefold()
 
     # -- writing ------------------------------------------------------------
     def add_package(self, value: Any) -> str:
@@ -196,7 +235,7 @@ class Library:
             record = {"id": uuid.uuid4().hex[:12], "module": module_id,
                       "moduleFolder": safe_name(module_folder), "revisions": [],
                       "finalised": False, "verifierComment": "", "designerResponse": "",
-                      "notes": ""}
+                      "notes": "", "description": "", "checker": ""}
             self.data["calculations"].append(record)
 
         self._supersede(record, package_folder)
@@ -215,6 +254,8 @@ class Library:
                        "level": str(identity.get("level") or ""),
                        "calcType": str(identity.get("calcType") or ""),
                        "title": str(identity.get("title") or ""),
+                       "description": str(inputs.get("description")
+                                          or record.get("description") or ""),
                        "worstUtil": summary.get("worstUtil", 0.0),
                        "criticalCheck": summary.get("criticalCheck", ""),
                        "status": summary.get("status", ""),
@@ -251,7 +292,8 @@ class Library:
             package = self.add_package(fields["package"])
             if package != record.get("package"):
                 self._repackage(record, package)
-        for key in ("level", "verifierComment", "designerResponse", "notes", "title"):
+        for key in ("level", "verifierComment", "designerResponse", "notes", "title",
+                    "description"):
             if key in fields:
                 record[key] = str(fields[key]).strip()
         if "finalised" in fields:
@@ -260,6 +302,85 @@ class Library:
             self.data["levels"].append(record["level"])
         self.write()
         return record
+
+    def set_checker(self, calculation_ids: list[str], initials: str, reference: str) -> int:
+        """Record the verifier against calculations a verification package closed out.
+
+        ``Checked by`` is never typed by the designer: it appears only once the
+        verifier has endorsed the package the calculation was issued in.
+        """
+        marked = 0
+        wanted = {str(item) for item in calculation_ids}
+        for record in self.data["calculations"]:
+            if record["id"] not in wanted:
+                continue
+            record["checker"] = clean_initials(initials)
+            record["checkedIn"] = str(reference)
+            record["checkedAt"] = datetime.now().isoformat(timespec="minutes")
+            marked += 1
+        if marked:
+            self.write()
+        return marked
+
+    def import_pdf(self, *, source: str | Path, member_type: str, number: str,
+                   package: str, level: str, title: str, description: str,
+                   calc_type: str, initials: str, origin: str = "") -> dict[str, Any]:
+        """File a calculation prepared in other software as a library record."""
+        source = Path(str(source))
+        if source.suffix.lower() != ".pdf" or not source.is_file():
+            raise ValueError("Choose a PDF file to import")
+        member_type = safe_name(member_type or source.stem)
+        number = normalise_number(number)
+        package = self.add_package(package)
+        folder = self.root / IMPORTED_FOLDER / package
+        folder.mkdir(parents=True, exist_ok=True)
+        saved_at = datetime.now()
+        while True:
+            stamp = saved_at.strftime("%y%m%d %H-%M")
+            base = f"{member_type}-{number}-{stamp}-{clean_initials(initials)}"
+            if not any(self.root.rglob(f"{base}.pdf")):
+                break
+            saved_at += timedelta(minutes=1)
+        target = folder / f"{base}.pdf"
+        shutil.copy2(str(source), str(target))
+
+        record = self.match(IMPORTED, member_type, number)
+        if record is None:
+            record = {"id": uuid.uuid4().hex[:12], "module": IMPORTED,
+                      "moduleFolder": IMPORTED_FOLDER, "revisions": [], "finalised": False,
+                      "verifierComment": "", "designerResponse": "", "notes": ""}
+            self.data["calculations"].append(record)
+        self._supersede(record, folder)
+        revision = {"rev": len(record["revisions"]) + 1, "filename": target.name,
+                    "relativePath": str(target.relative_to(self.root)),
+                    "savedAt": saved_at.replace(second=0, microsecond=0).isoformat(timespec="minutes"),
+                    "initials": clean_initials(initials), "superseded": False,
+                    "worstUtil": 0.0, "criticalCheck": "", "status": ""}
+        record["revisions"].append(revision)
+        record.update({"memberType": member_type, "memberNumber": number, "package": package,
+                       "level": str(level or ""),
+                       "calcType": str(calc_type or "Imported PDF"),
+                       "title": str(title or source.stem),
+                       "description": str(description or ""),
+                       "origin": str(origin or source.name),
+                       "worstUtil": 0.0, "criticalCheck": "", "status": "",
+                       "headline": "Imported PDF calculation",
+                       "updatedAt": revision["savedAt"],
+                       "updatedBy": clean_initials(initials), "inputs": {}})
+        if record["level"] and record["level"] not in self.data["levels"]:
+            self.data["levels"].append(record["level"])
+        self.write()
+        return {"calculationId": record["id"], "pdfPath": str(target),
+                "revision": revision}
+
+    def record_issue(self, entry: dict[str, Any]) -> dict[str, Any]:
+        """Add an exported package to the project's issue register."""
+        issue = {"id": uuid.uuid4().hex[:10],
+                 "issuedAt": datetime.now().isoformat(timespec="minutes"),
+                 "date": datetime.now().strftime("%d/%m/%Y"), **entry}
+        self.data.setdefault("issues", []).append(issue)
+        self.write()
+        return issue
 
     def _repackage(self, record: dict[str, Any], package: str) -> None:
         destination = self.root / record.get("moduleFolder", "") / package

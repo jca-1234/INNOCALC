@@ -8,13 +8,21 @@ const $ = id => document.getElementById(id);
 const state = {
   token: "", user: null, people: [],
   projects: [], project: null,
-  modules: [], module: null, schema: null,
+  modules: [], module: null, schema: null, categories: [], moduleCategory: "", favourites: [],
   inputs: {}, fields: [], checks: {}, cells: [],
   calculationId: "", dirty: false, view: "library",
-  library: null, qa: [], qaTemplate: null,
+  library: null, qa: [], qaTemplate: null, filters: {}, issues: [],
   packageEntries: [], packageSelection: new Set(),
   timer: 0, request: 0
 };
+
+/* Small line icons; a PDF link and a folder link are recognised at a glance. */
+const ICON = {
+  pdf: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 0H3.5A1.5 1.5 0 0 0 2 1.5v13A1.5 1.5 0 0 0 3.5 16h9a1.5 1.5 0 0 0 1.5-1.5V4.5L9.5 0zm0 1.5L12.5 4.5H10a.5.5 0 0 1-.5-.5V1.5zM4.6 12.6V8.9h1.3c.9 0 1.4.4 1.4 1.2s-.5 1.2-1.4 1.2h-.5v1.3H4.6zm.8-2h.4c.3 0 .5-.2.5-.5s-.2-.5-.5-.5h-.4v1zm2.6 2V8.9h1.3c1.1 0 1.7.6 1.7 1.8s-.6 1.9-1.7 1.9H8zm.8-.7h.4c.5 0 .8-.4.8-1.2s-.3-1.1-.8-1.1h-.4v2.3zm3-3h2.1v.7h-1.3v.8h1.2v.7h-1.2v1.5h-.8V8.9z"/></svg>',
+  folder: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 2.5h4.2l1.3 1.5h7.5a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H1.5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1z"/></svg>'
+};
+const REASONS = ["Internal Review", "Verification", "Certification",
+  "Preliminary Check", "Status Print"];
 
 /* ---------------------------------------------------------------- utilities */
 async function api(path, payload, method = "POST") {
@@ -29,7 +37,11 @@ async function api(path, payload, method = "POST") {
   return data;
 }
 function get(path, params) {
-  const query = new URLSearchParams({ token: state.token, ...(params || {}) });
+  const query = new URLSearchParams({ token: state.token });
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (Array.isArray(value)) value.forEach(item => query.append(key, item));
+    else query.set(key, value);
+  });
   return api(`${path}?${query}`, null, "GET");
 }
 function toast(message, bad = false) {
@@ -46,6 +58,35 @@ function esc(value) {
 }
 function fileUrl(path) {
   return `/api/file?${new URLSearchParams({ token: state.token, path })}`;
+}
+function openFile(path) {
+  if (path) window.open(fileUrl(path), "_blank");
+}
+async function revealFolder(path) {
+  try { await get("/api/reveal", { path }); }
+  catch (error) { toast(error.message, true); }
+}
+function linkButtons(record) {
+  const pdf = record.pdfPath
+    ? `<button class="icon-link pdf" data-pdf-path="${esc(record.pdfPath)}" title="Open the PDF">${ICON.pdf}</button>` : "";
+  const folder = record.folder
+    ? `<button class="icon-link folder" data-folder="${esc(record.folder)}" title="Open the folder">${ICON.folder}</button>` : "";
+  return pdf + folder;
+}
+function wireLinks(host) {
+  host.querySelectorAll("[data-pdf-path]").forEach(button =>
+    button.onclick = () => openFile(button.dataset.pdfPath));
+  host.querySelectorAll("[data-folder]").forEach(button =>
+    button.onclick = () => revealFolder(button.dataset.folder));
+}
+/* Saving prints a PDF with headless Chromium, which takes a few seconds, so the
+   state of both the save and the print is always on screen. */
+function setSaveState(text, kind = "busy") {
+  const node = $("saveState");
+  node.textContent = text || "";
+  node.className = `save-state${text ? ` ${kind}` : ""}`;
+  clearTimeout(node._timer);
+  if (text && kind !== "busy") node._timer = setTimeout(() => setSaveState(""), 6000);
 }
 function percent(value) { return `${(Number(value || 0) * 100).toFixed(1)}%`; }
 function statusPill(status) {
@@ -122,6 +163,53 @@ async function startSso() {
   } catch (error) { $("ssoError").textContent = error.message; }
 }
 
+/* ------------------------------------------------- multi-select filter menu */
+/* The index will hold thousands of calculations, so each filter is a dropdown
+   of tick boxes rather than a single-choice select. */
+function multiSelect(hostId, label, onChange) {
+  const host = $(hostId);
+  host.innerHTML = `<span class="multi-label">${esc(label)}</span>
+    <button type="button">All</button><div class="multi-panel" hidden></div>`;
+  const button = host.querySelector("button");
+  const panel = host.querySelector(".multi-panel");
+  const control = { values: [], options: [] };
+  const label_ = () => {
+    button.textContent = control.values.length === 0 ? "All"
+      : control.values.length === 1 ? control.values[0]
+        : `${control.values.length} selected`;
+    button.classList.toggle("on", control.values.length > 0);
+  };
+  const draw = () => {
+    panel.innerHTML = control.options.map(item =>
+      `<label><input type="checkbox" value="${esc(item)}"${control.values.includes(item) ? " checked" : ""}> ${esc(item)}</label>`).join("")
+      + `<div class="multi-actions"><button type="button" data-all>All</button>
+         <button type="button" data-none>None</button></div>`;
+    panel.querySelectorAll("input").forEach(box => box.onchange = () => {
+      control.values = [...panel.querySelectorAll("input:checked")].map(item => item.value);
+      label_(); onChange();
+    });
+    panel.querySelector("[data-all]").onclick = () => { control.values = [...control.options]; draw(); label_(); onChange(); };
+    panel.querySelector("[data-none]").onclick = () => { control.values = []; draw(); label_(); onChange(); };
+  };
+  button.onclick = () => {
+    document.querySelectorAll(".multi-panel").forEach(item => { if (item !== panel) item.hidden = true; });
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) draw();
+  };
+  document.addEventListener("click", event => {
+    if (!host.contains(event.target)) panel.hidden = true;
+  });
+  control.setOptions = options => {
+    control.options = [...options];
+    control.values = control.values.filter(item => control.options.includes(item));
+    label_();
+    if (!panel.hidden) draw();
+  };
+  control.clear = () => { control.values = []; label_(); if (!panel.hidden) draw(); };
+  label_();
+  return control;
+}
+
 /* --------------------------------------------------------------- projects */
 function projectLabel(item) {
   const name = [item.code, item.clientRef, item.projectName].filter(Boolean).join(" - ");
@@ -142,12 +230,13 @@ function renderProjectSelect() {
 function renderProjectList() {
   const rows = state.projects.map(item => `
     <tr data-project="${esc(item.id)}">
-      <td>${esc(projectLabel(item))}${item.exists ? "" : ' <span class="pill fail">missing</span>'}</td>
+      <td>${esc(projectLabel(item))}${item.exists ? "" : ' <span class="pill fail">missing</span>'}${item.archived ? ' <span class="pill noted">archived</span>' : ""}</td>
       <td class="muted">${esc(item.folderPath)}</td>
       <td class="nowrap">${esc(item.role || "")}</td>
       <td class="nowrap">${esc(stamp(item.lastOpened))}</td>
       <td class="row-actions">
         <button data-open="${esc(item.id)}">Open</button>
+        <button data-relink="${esc(item.id)}" title="Point this project at a different folder">Relink</button>
         <button data-archive="${esc(item.id)}">${item.archived ? "Restore" : "Archive"}</button>
         <button data-forget="${esc(item.id)}" class="danger" title="Remove from your list only">Remove</button>
       </td>
@@ -157,6 +246,8 @@ function renderProjectList() {
     : '<p class="empty-state">No projects yet. Add one below.</p>';
   $("projectList").querySelectorAll("[data-open]").forEach(button =>
     button.onclick = () => openProject(button.dataset.open).then(() => $("projectsDialog").close()));
+  $("projectList").querySelectorAll("[data-relink]").forEach(button =>
+    button.onclick = () => relinkProject(button.dataset.relink));
   $("projectList").querySelectorAll("[data-archive]").forEach(button =>
     button.onclick = () => archiveProject(button.dataset.archive));
   $("projectList").querySelectorAll("[data-forget]").forEach(button =>
@@ -208,6 +299,7 @@ async function archiveProject(projectId) {
     state.projects = data.projects;
     renderProjectSelect();
     renderProjectList();
+    toast(project.archived ? "Project restored" : "Project archived");
   } catch (error) { toast(error.message, true); }
 }
 async function forgetProject(projectId) {
@@ -218,26 +310,63 @@ async function forgetProject(projectId) {
     if (state.project && state.project.id === projectId) state.project = null;
     renderProjectSelect();
     renderProjectList();
+    toast("Removed from your project list");
+  } catch (error) { toast(error.message, true); }
+}
+/* A folder that has been moved or renamed leaves a dead link; re-address it
+   here rather than adding the project again and losing its history. */
+async function relinkProject(projectId) {
+  const project = state.projects.find(item => item.id === projectId);
+  try {
+    const picked = await get("/api/pick", { title: `Folder for ${projectLabel(project)}`, scope: "project" });
+    if (!picked.path) return;
+    const data = await api("/api/projects/relink", { projectId, path: picked.path });
+    state.projects = data.projects;
+    if (state.project && state.project.id === projectId) state.project = data.project;
+    renderProjectSelect();
+    renderProjectList();
+    toast(`Project folder now ${data.project.folderPath}`);
   } catch (error) { toast(error.message, true); }
 }
 async function findProject() {
-  const code = $("findCode").value.trim();
-  if (!code) return;
+  const query = $("findCode").value.trim();
+  if (!query) return;
   $("findResults").innerHTML = '<p class="muted">Looking&hellip;</p>';
   try {
-    const data = await api("/api/projects/find", { code });
+    const data = await api("/api/projects/search", { query });
     if (!data.matches.length) {
       $("findResults").innerHTML = data.scanning
         ? '<p class="notice">Not in the index yet. A background scan has started - try again shortly, or add the folder below.</p>'
-        : '<p class="notice">No folder found for that number. Add it below.</p>';
+        : '<p class="notice">Nothing found for that number or name. Add it below.</p>';
       return;
     }
     $("findResults").innerHTML = `<table class="data"><tbody>${data.matches.map(item => `
       <tr><td>${esc(projectLabel(item))}</td><td class="muted">${esc(item.folderPath)}</td>
-      <td><button data-add="${esc(item.folderPath)}">Add and open</button></td></tr>`).join("")}</tbody></table>`;
+      <td class="row-actions"><button data-use="${esc(item.folderPath)}">Use</button>
+      <button data-add="${esc(item.folderPath)}" class="primary">Add and open</button></td></tr>`).join("")}</tbody></table>`;
     $("findResults").querySelectorAll("[data-add]").forEach(button =>
       button.onclick = () => addProject(button.dataset.add, true));
+    $("findResults").querySelectorAll("[data-use]").forEach(button =>
+      button.onclick = () => fillNewProject(button.dataset.use));
   } catch (error) { $("findResults").innerHTML = `<p class="error">${esc(error.message)}</p>`; }
+}
+/* Typing a project number is enough: the folder, client reference and project
+   name are read from the matching folder on the drive. */
+async function lookupProjectNumber() {
+  const code = $("newProjectCode").value.trim();
+  if (code.length < 3 || $("newProjectPath").value.trim()) return;
+  try {
+    const data = await api("/api/projects/search", { query: code });
+    if (data.matches.length === 1) fillNewProject(data.matches[0].folderPath, data.matches[0]);
+  } catch { /* the number may simply not exist yet */ }
+}
+function fillNewProject(path, described) {
+  $("newProjectPath").value = path;
+  const parts = described || {};
+  const fallback = (path.split(/[\\/]/).pop() || "").split(" - ");
+  $("newProjectCode").value = parts.code || fallback[0] || "";
+  $("newProjectClient").value = parts.clientRef ?? (fallback[1] || "");
+  $("newProjectName").value = parts.projectName ?? fallback.slice(2).join(" - ");
 }
 async function addProject(path, openAfter) {
   $("projectsError").textContent = "";
@@ -246,8 +375,7 @@ async function addProject(path, openAfter) {
       path: path || $("newProjectPath").value.trim(),
       code: $("newProjectCode").value.trim(),
       clientRef: $("newProjectClient").value.trim(),
-      projectName: $("newProjectName").value.trim(),
-      createFolders: $("newProjectCreate").checked
+      projectName: $("newProjectName").value.trim()
     });
     state.projects = data.projects;
     renderProjectSelect();
@@ -262,32 +390,88 @@ async function addProject(path, openAfter) {
 async function pickFolder(target, mode) {
   try {
     const data = await get("/api/pick", mode === "file"
-      ? { mode: "file", title: "Select a PDF" } : { title: "Select project folder" });
+      ? { mode: "file", title: "Select a PDF" }
+      : { title: "Select project folder", scope: "project" });
     if (!data.path) return;
-    $(target).value = data.path;
-    if (target === "newProjectPath") {
-      const parts = (data.path.split(/[\\/]/).pop() || "").split(" - ");
-      $("newProjectCode").value = parts[0] || "";
-      $("newProjectClient").value = parts[1] || "";
-      $("newProjectName").value = parts.slice(2).join(" - ");
-    }
+    if (target === "newProjectPath") fillNewProject(data.path);
+    else $(target).value = data.path;
   } catch (error) { toast(error.message, true); }
 }
 
 /* ---------------------------------------------------------------- modules */
+/* Many more modules are coming, so the chooser is a discipline tree with a
+   Favourites branch and a search, not one long list of cards. */
+const FAVOURITES_KEY = "innocalc.favourites";
+function loadFavourites() {
+  try { state.favourites = JSON.parse(localStorage.getItem(FAVOURITES_KEY)) || []; }
+  catch { state.favourites = []; }
+}
+function toggleFavourite(moduleId) {
+  state.favourites = state.favourites.includes(moduleId)
+    ? state.favourites.filter(item => item !== moduleId)
+    : [...state.favourites, moduleId];
+  localStorage.setItem(FAVOURITES_KEY, JSON.stringify(state.favourites));
+  renderModuleBrowser();
+}
 async function loadModules() {
   const data = await api("/api/modules", null, "GET");
   state.modules = data.modules || [];
+  state.categories = data.categories || [];
   (data.problems || []).forEach(problem =>
     toast(`Module ${problem.entry} did not load: ${problem.error}`, true));
-  $("libraryModule").innerHTML = '<option value="">All</option>'
-    + state.modules.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("");
-  $("moduleCards").innerHTML = state.modules.map(item => `
+  loadFavourites();
+  renderModuleBrowser();
+}
+function moduleBranches() {
+  // Every discipline branch is shown, including the ones still to be filled, so
+  // the shape of the suite is visible as modules are commissioned.
+  const used = new Set(state.modules.map(item => item.category || "General"));
+  const extra = [...used].filter(item => !state.categories.includes(item)).sort();
+  return ["Favourites", ...state.categories, ...extra];
+}
+function modulesIn(branch) {
+  const search = $("moduleSearch").value.trim().toLowerCase();
+  const pool = branch === "Favourites"
+    ? state.modules.filter(item => state.favourites.includes(item.id))
+    : state.modules.filter(item => (item.category || "General") === branch);
+  if (!search) return pool;
+  return pool.filter(item => [item.name, item.short, item.standard, item.description,
+    item.category].join(" ").toLowerCase().includes(search));
+}
+function renderModuleBrowser() {
+  const branches = moduleBranches();
+  const search = $("moduleSearch").value.trim();
+  const counts = Object.fromEntries(branches.map(item => [item, modulesIn(item).length]));
+  // A search narrows the tree to the branches that still have something in it.
+  const visible = search ? branches.filter(item => counts[item]) : branches;
+  if (!visible.includes(state.moduleCategory)) state.moduleCategory = visible[0] || "";
+  $("moduleTree").innerHTML = visible.map(branch =>
+    `<button type="button" data-branch="${esc(branch)}" class="${branch === state.moduleCategory ? "selected" : ""}${counts[branch] ? "" : " empty"}">
+      <span>${esc(branch)}</span><small>${counts[branch]}</small></button>`).join("")
+    || '<p class="muted">No module matches.</p>';
+  $("moduleTree").querySelectorAll("[data-branch]").forEach(button =>
+    button.onclick = () => { state.moduleCategory = button.dataset.branch; renderModuleBrowser(); });
+  const cards = modulesIn(state.moduleCategory);
+  $("moduleCards").innerHTML = cards.map(item => `
     <button class="module-card" data-module="${esc(item.id)}" type="button">
+      <span class="fav${state.favourites.includes(item.id) ? "" : " off"}"
+            data-fav="${esc(item.id)}" title="Favourite">&#9733;</span>
       <b>${esc(item.name)}</b><small>${esc(item.standard)} &middot; ${esc(item.version)}</small>
-      <p>${esc(item.description)}</p></button>`).join("");
+      <p>${esc(item.description)}</p></button>`).join("")
+    || `<p class="empty-state">${state.moduleCategory === "Favourites"
+      ? "Star a module to keep it here."
+      : `No ${state.moduleCategory.toLowerCase()} module yet.`}</p>`;
   $("moduleCards").querySelectorAll("[data-module]").forEach(card =>
     card.onclick = () => { $("moduleDialog").close(); newCalculation(card.dataset.module); });
+  $("moduleCards").querySelectorAll("[data-fav]").forEach(star =>
+    star.onclick = event => { event.stopPropagation(); toggleFavourite(star.dataset.fav); });
+}
+function openModuleDialog() {
+  if (!state.project) return toast("Open a project first", true);
+  $("moduleSearch").value = "";
+  state.moduleCategory = state.favourites.length ? "Favourites" : "";
+  renderModuleBrowser();
+  $("moduleDialog").showModal();
 }
 
 /* ------------------------------------------------- schema driven input form */
@@ -537,8 +721,10 @@ function readInputs() {
   values.package = $("idPackage").value.trim() || "Unallocated";
   values.level = $("idLevel").value.trim();
   values.subject = $("idSubject").value.trim();
-  values.checker = $("idChecker").value.trim();
+  values.description = $("idDescription").value.trim();
   values.designer = $("idDesigner").value.trim();
+  // 'Checked by' is the verifier's, written when they close the verification out.
+  values.checker = $("idChecker").value.trim();
   if (state.schema && state.schema.editor === "cells") values.cells = state.cells;
   return values;
 }
@@ -552,7 +738,9 @@ function applyIdentity(values, schema) {
   $("idPackage").value = values.package || "Unallocated";
   $("idLevel").value = values.level || "";
   $("idSubject").value = values.subject || schema.defaultSubject || "";
+  $("idDescription").value = values.description || "";
   $("idChecker").value = values.checker || "";
+  $("idChecker").placeholder = values.checker ? "" : "Set on verification";
   $("idDesigner").value = values.designer || (state.user ? state.user.initials : "");
   const library = state.library || {};
   $("idPackages").innerHTML = (library.packages || []).map(item => `<option value="${esc(item)}">`).join("");
@@ -605,12 +793,19 @@ async function openCalculation(calculationId) {
   if (!await guard()) return;
   try {
     const record = (await get("/api/calculation", { project: state.project.id, id: calculationId })).calculation;
+    if (record.module === "imported-pdf") {
+      openFile(record.pdfPath);
+      return;
+    }
     const data = await get("/api/module/schema", { module: record.module });
     state.module = state.modules.find(item => item.id === record.module);
     state.calculationId = record.id;
     state.inputs = { ...record.inputs };
-    renderSchemaForm(data.schema, record.inputs);
-    applyIdentity(record.inputs, data.schema);
+    // The record carries what the verifier and the index own, not the form.
+    const values = { ...record.inputs, checker: record.checker || "",
+      description: record.description || "" };
+    renderSchemaForm(data.schema, values);
+    applyIdentity(values, data.schema);
     $("inputTitle").textContent = `${data.schema.name} - rev ${record.revisions.length}`;
     setDirty(false);
     showView("calculation");
@@ -624,13 +819,15 @@ async function saveCalculation(supersede = true) {
   const identity = `${$("idMemberType").value.trim()}`;
   if (!identity) { toast("Give the calculation a type", true); throw new Error("no type"); }
   $("saveCalculation").disabled = true;
+  setSaveState("Saving\u2026");
   try {
     const data = await api("/api/calculation/save", {
       projectId: state.project.id, module: state.module.id, inputs: readInputs(),
-      calculationId: state.calculationId, supersede, meta: { checker: $("idChecker").value }
+      calculationId: state.calculationId, supersede
     });
     if (data.conflict) {
       $("saveCalculation").disabled = false;
+      setSaveState("");
       if (confirm("A calculation with this type and number already exists. Supersede it?")) {
         return saveCalculation(true);
       }
@@ -641,12 +838,30 @@ async function saveCalculation(supersede = true) {
     setDirty(false);
     renderLibrary();
     renderTree();
-    toast(data.pdf ? "Saved with PDF" : `Saved (PDF not produced: ${data.pdfError || "unknown"})`);
+    toast(`Saved revision ${data.revision.rev}`);
+    watchPdf(data.calculationId);
     return data;
   } catch (error) {
+    setSaveState("Save failed", "bad");
     toast(error.message, true);
     throw error;
   } finally { $("saveCalculation").disabled = false; }
+}
+/* The sheet is printed on the server behind the save, so the indicator follows
+   it until the PDF is on the drive. */
+function watchPdf(calculationId) {
+  clearTimeout(state.pdfTimer);
+  setSaveState("Printing PDF\u2026");
+  const poll = async () => {
+    try {
+      const data = await get("/api/calculation/pdf", { id: calculationId });
+      if (data.status === "printing") { state.pdfTimer = setTimeout(poll, 900); return; }
+      if (data.status === "ready") setSaveState("Saved with PDF", "done");
+      else if (data.status === "failed") setSaveState(`PDF not produced: ${data.error}`, "bad");
+      else setSaveState("Saved", "done");
+    } catch { setSaveState("Saved", "done"); }
+  };
+  state.pdfTimer = setTimeout(poll, 900);
 }
 async function runModuleAction(actionId) {
   try {
@@ -671,11 +886,22 @@ async function runModuleAction(actionId) {
   } catch (error) { toast(error.message, true); }
 }
 
-/* ---------------------------------------------------------------- library */
+/* ------------------------------------------------------- calculation index */
 function moduleName(id) {
+  if (id === "imported-pdf") return "Imported PDF";
   const module = state.modules.find(item => item.id === id);
   return module ? module.short || module.name : id;
 }
+const INDEX_SORTS = [
+  { id: "package", label: "Package, level, type" },
+  { id: "level", label: "Level" },
+  { id: "memberType", label: "Type" },
+  { id: "memberNumber", label: "Number" },
+  { id: "title", label: "Title" },
+  { id: "status", label: "Status" },
+  { id: "worstUtil", label: "Utilisation" },
+  { id: "updatedAt", label: "Last saved" }
+];
 async function refreshLibrary() {
   if (!state.project) return;
   try {
@@ -683,14 +909,20 @@ async function refreshLibrary() {
       project: state.project.id,
       showSuperseded: $("libraryShowSuperseded").checked ? "1" : "0",
       search: $("librarySearch").value.trim(),
-      package: $("libraryPackage").value,
-      level: $("libraryLevel").value,
-      module: $("libraryModule").value,
-      calcType: $("libraryCalcType").value
+      package: state.filters.package.values,
+      level: state.filters.level.values,
+      module: state.filters.module.values.map(moduleIdFor),
+      calcType: state.filters.calcType.values
     });
     state.library = data.library;
+    state.issues = data.library.issues || [];
     renderLibrary(true);
   } catch (error) { toast(error.message, true); }
+}
+function moduleIdFor(name) {
+  if (name === "Imported PDF") return "imported-pdf";
+  const module = state.modules.find(item => (item.short || item.name) === name);
+  return module ? module.id : name;
 }
 function fillFilter(select, values, keep) {
   const current = keep ? select.value : "";
@@ -698,64 +930,80 @@ function fillFilter(select, values, keep) {
     + values.map(item => `<option value="${esc(item)}">${esc(item)}</option>`).join("");
   select.value = current;
 }
+function sortedCalculations(rows) {
+  const key = $("librarySort").value || "package";
+  const of = record => key === "worstUtil" ? Number(record.worstUtil || 0)
+    : String(record[key] ?? "").toLowerCase();
+  if (key === "package") return rows;   // the server already orders this way
+  return [...rows].sort((a, b) => (of(a) > of(b) ? 1 : of(a) < of(b) ? -1 : 0));
+}
 function renderLibrary(keepFilters) {
   const library = state.library;
   if (!library) return;
-  fillFilter($("libraryPackage"), library.packages || [], keepFilters);
-  fillFilter($("libraryLevel"), library.levels || [], keepFilters);
-  fillFilter($("libraryCalcType"), library.calcTypes || [], keepFilters);
+  state.issues = library.issues || state.issues;
+  state.filters.package.setOptions(library.packages || []);
+  state.filters.level.setOptions(library.levels || []);
+  state.filters.calcType.setOptions(library.calcTypes || []);
+  state.filters.module.setOptions([...new Set((library.calculations || [])
+    .map(item => moduleName(item.module)))].sort());
   fillFilter($("pkgPackage"), library.packages || [], true);
   fillFilter($("pkgLevel"), library.levels || [], true);
   fillFilter($("pkgCalcType"), library.calcTypes || [], true);
   fillFilter($("pkgMemberType"), library.memberTypes || [], true);
-  const rows = (library.calculations || []).map(record => {
+  $("idPackages").innerHTML = (library.packages || []).map(item => `<option value="${esc(item)}">`).join("");
+  $("idLevels").innerHTML = (library.levels || []).map(item => `<option value="${esc(item)}">`).join("");
+  const rows = sortedCalculations(library.calculations || []).map(record => {
     const latest = record.revisions[record.revisions.length - 1] || {};
     const over = Number(record.worstUtil || 0) > 1;
-    return `<tr${latest.superseded ? ' class="superseded"' : ""}>
-      <td>${esc(record.package)}</td>
-      <td>${esc(record.level)}</td>
+    return `<tr${record.superseded ? ' class="superseded"' : ""}>
+      <td class="edit"><input data-edit="package" data-id="${esc(record.id)}" list="idPackages" value="${esc(record.package)}"></td>
+      <td class="edit"><input data-edit="level" data-id="${esc(record.id)}" list="idLevels" value="${esc(record.level)}" size="6"></td>
       <td>${esc(moduleName(record.module))}</td>
       <td>${esc(record.memberType)}</td>
       <td>${esc(record.memberNumber)}</td>
       <td>${esc(record.title)}</td>
+      <td class="edit"><input data-edit="description" data-id="${esc(record.id)}" value="${esc(record.description || "")}" placeholder="Description"></td>
       <td class="nowrap">${statusPill(record.status)} <span class="util${over ? " over" : ""}">${percent(record.worstUtil)}</span></td>
       <td>${esc(record.criticalCheck)}</td>
+      <td class="nowrap">${esc(record.checker || "")}</td>
       <td class="nowrap">rev ${esc(latest.rev || record.revisions.length)} ${esc(stamp(latest.savedAt))} ${esc(latest.initials || "")}</td>
       <td class="nowrap"><input type="checkbox" data-final="${esc(record.id)}"${record.finalised ? " checked" : ""} title="Finalised"></td>
       <td class="row-actions">
+        ${linkButtons(record)}
         <button data-open-calc="${esc(record.id)}">Open</button>
-        ${latest.relativePath ? `<button data-pdf="${esc(record.id)}">PDF</button>` : ""}
         <button data-link="${esc(record.id)}" title="Send these values into another calculation">Link</button>
         <button data-remove="${esc(record.id)}" class="danger" title="Remove from the library index">Remove</button>
       </td></tr>`;
   }).join("");
   $("libraryTable").innerHTML = rows
     ? `<table class="data"><thead><tr><th>Package</th><th>Level</th><th>Module</th><th>Type</th>
-       <th>No.</th><th>Title</th><th>Status</th><th>Governing check</th><th>Latest revision</th>
-       <th>Final</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+       <th>No.</th><th>Title</th><th>Description</th><th>Status</th><th>Governing check</th>
+       <th>Checked by</th><th>Latest revision</th><th>Final</th><th></th></tr></thead>
+       <tbody>${rows}</tbody></table>`
     : '<p class="empty-state">No calculations yet. Choose <b>New calculation</b> to start one.</p>';
+  wireLinks($("libraryTable"));
   $("libraryTable").querySelectorAll("[data-open-calc]").forEach(button =>
     button.onclick = () => openCalculation(button.dataset.openCalc));
-  $("libraryTable").querySelectorAll("[data-pdf]").forEach(button =>
-    button.onclick = () => openPdf(button.dataset.pdf));
   $("libraryTable").querySelectorAll("[data-final]").forEach(box =>
     box.onchange = () => updateCalculation(box.dataset.final, { finalised: box.checked }));
+  $("libraryTable").querySelectorAll("[data-edit]").forEach(input => {
+    input.dataset.was = input.value;
+    input.onchange = () => {
+      if (input.value === input.dataset.was) return;
+      updateCalculation(input.dataset.id, { [input.dataset.edit]: input.value });
+    };
+  });
   $("libraryTable").querySelectorAll("[data-remove]").forEach(button =>
     button.onclick = () => removeCalculation(button.dataset.remove));
   $("libraryTable").querySelectorAll("[data-link]").forEach(button =>
     button.onclick = () => linkCalculation(button.dataset.link));
-}
-function openPdf(calculationId) {
-  const record = (state.library.calculations || []).find(item => item.id === calculationId);
-  const latest = record.revisions[record.revisions.length - 1];
-  const path = `${state.library.toolFolder}\\${latest.relativePath}`.replace(/\.html$/i, ".pdf");
-  window.open(fileUrl(path), "_blank");
 }
 async function updateCalculation(id, fields) {
   try {
     const data = await api("/api/calculation/update", { projectId: state.project.id, id, fields });
     state.library = data.library;
     renderLibrary(true);
+    toast("Calculation index updated");
   } catch (error) { toast(error.message, true); }
 }
 async function removeCalculation(id) {
@@ -768,6 +1016,10 @@ async function removeCalculation(id) {
   } catch (error) { toast(error.message, true); }
 }
 async function linkCalculation(sourceId) {
+  const record = (state.library.calculations || []).find(item => item.id === sourceId);
+  if (record && record.module === "imported-pdf") {
+    return toast("An imported PDF has no values to link", true);
+  }
   const choices = state.modules.map((item, index) => `${index + 1}. ${item.name}`).join("\n");
   const answer = prompt(`Send these values into which module?\n${choices}`, "1");
   const module = state.modules[Number(answer) - 1];
@@ -835,7 +1087,9 @@ async function refreshPackage() {
     state.sortFields = data.sortFields;
     state.packageEntries = data.entries;
     fillSortSelects();
+    fillReviewers();
     renderPackage();
+    renderIssues();
   } catch (error) { toast(error.message, true); }
 }
 function renderPackage() {
@@ -862,30 +1116,69 @@ function renderPackage() {
 }
 async function buildPackage() {
   if (!state.packageSelection.size) return toast("Select at least one calculation", true);
+  const reviewer = $("pkgReviewer").selectedOptions[0];
   $("packageBuild").disabled = true;
-  toast("Building the package; this can take a moment.");
+  setSaveState("Building the package\u2026");
   try {
     const data = await api("/api/package/build", {
       projectId: state.project.id,
       selection: [...state.packageSelection],
       sort: sortOrder(),
-      meta: { title: $("pkgTitle").value.trim() || "Calculation package" },
+      meta: {
+        title: $("pkgTitle").value.trim() || "Calculation package",
+        reason: $("pkgReason").value.trim() || "Internal Review",
+        reviewerEmail: $("pkgReviewer").value,
+        verifierInitials: reviewer ? (reviewer.textContent.match(/\(([^)]+)\)/) || [, ""])[1] : ""
+      },
       drawings: $("pkgDrawings").value.trim() ? [{ path: $("pkgDrawings").value.trim() }] : []
     });
-    toast(`${data.sheets} sheet(s) exported${data.attachments ? ` plus ${data.attachments} attachment(s)` : ""}`);
-    window.open(data.url, "_blank");
-  } catch (error) { toast(error.message, true); }
+    state.issues = data.issues || [];
+    renderIssues();
+    setSaveState(`${data.issue.ref} issued`, "done");
+    toast(`${data.sheets} sheet(s) exported as ${data.issue.ref}`
+      + `${data.drawingsPath ? ", drawings issued separately" : ""}`
+      + `${data.draft && data.draft.path ? ", draft email raised" : ""}`);
+    openFile(data.pdfPath);
+  } catch (error) { setSaveState("Export failed", "bad"); toast(error.message, true); }
   finally { $("packageBuild").disabled = false; }
+}
+/* Every issue is kept with the date it went out and a link back to the file. */
+function renderIssues() {
+  const rows = (state.issues || []).map(item => `
+    <tr><td class="nowrap">${esc(item.ref)}</td><td>${esc(item.title)}</td>
+      <td>${esc(item.reason)}</td><td class="nowrap">${esc(item.date)}</td>
+      <td class="nowrap">${esc(item.issuedBy)}</td>
+      <td class="nowrap">${esc(item.calculations)} calc / ${esc(item.sheets)} sheets</td>
+      <td class="row-actions">
+        ${linkButtons({ pdfPath: item.pdfPath, folder: item.folder })}
+        ${item.drawingsPath ? `<button class="icon-link pdf" data-pdf-path="${esc(item.drawingsPath)}" title="Drawings">${ICON.pdf}</button>` : ""}
+      </td></tr>`).join("");
+  $("issueRegister").innerHTML = rows
+    ? `<table class="data"><thead><tr><th>Ref</th><th>Title</th><th>Reason for issue</th>
+       <th>Date of issue</th><th>By</th><th>Contents</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    : '<p class="empty-state">No packages issued from this project yet.</p>';
+  wireLinks($("issueRegister"));
+}
+function fillReviewers() {
+  const current = $("pkgReviewer").value;
+  $("pkgReviewer").innerHTML = '<option value="">No one - do not raise an email</option>'
+    + state.people.map(person =>
+      `<option value="${esc(person.email)}">${esc(person.displayName)} (${esc(person.initials)})</option>`).join("");
+  $("pkgReviewer").value = current;
+  if (!$("pkgReason").value) $("pkgReason").value = REASONS[0];
 }
 
 /* ------------------------------------------------------------------ QA */
 async function refreshQa() {
   if (!state.project) return;
   try {
-    const data = await get("/api/qa", { project: state.project.id });
+    // The server reads any marked-up PDF the verifier has returned to the
+    // package folder, so opening or refreshing this tab is enough to see it.
+    const data = await get("/api/qa", { project: state.project.id, scan: "1" });
     state.qa = data.packages || [];
     state.qaTemplate = data.template;
     renderQa();
+    if (data.imported) toast(`${data.imported} new verifier comment(s) found`);
   } catch (error) { toast(error.message, true); }
 }
 function renderQa() {
@@ -1050,7 +1343,8 @@ async function createQaPackage() {
     $("qaDialog").close();
     await refreshQa();
     showQaPackage(data.package.id);
-    toast(`Verification package ${data.package.ref} created`);
+    toast(`Verification package ${data.package.ref} created`
+      + `${data.draft && data.draft.path ? ", draft email raised for the verifier" : ""}`);
   } catch (error) { $("qaError").textContent = error.message; }
 }
 async function showQaStatus() {
@@ -1119,6 +1413,38 @@ async function savePeople() {
   } catch (error) { $("peopleError").textContent = error.message; }
 }
 
+/* ---------------------------------------------------------- PDF import */
+function openImportDialog() {
+  if (!state.project) return toast("Open a project first", true);
+  ["importPath", "importType", "importNumber", "importLevel", "importCalcType",
+    "importOrigin", "importTitle", "importDescription"].forEach(id => { $(id).value = ""; });
+  $("importPackage").value = "Unallocated";
+  $("importError").textContent = "";
+  $("importPdfDialog").showModal();
+}
+async function importPdfCalculation() {
+  $("importError").textContent = "";
+  try {
+    const data = await api("/api/calculation/import", {
+      projectId: state.project.id,
+      path: $("importPath").value.trim(),
+      memberType: $("importType").value.trim(),
+      memberNumber: $("importNumber").value.trim(),
+      package: $("importPackage").value.trim(),
+      level: $("importLevel").value.trim(),
+      calcType: $("importCalcType").value.trim(),
+      origin: $("importOrigin").value.trim(),
+      title: $("importTitle").value.trim(),
+      description: $("importDescription").value.trim()
+    });
+    state.library = data.library;
+    $("importPdfDialog").close();
+    renderLibrary(true);
+    renderTree();
+    toast("PDF calculation indexed");
+  } catch (error) { $("importError").textContent = error.message; }
+}
+
 /* ------------------------------------------------------------------- wiring */
 function wire() {
   $("signInForm").addEventListener("submit", signIn);
@@ -1146,6 +1472,8 @@ function wire() {
   };
   $("pickFolder").onclick = () => pickFolder("newProjectPath");
   $("addProject").onclick = () => addProject();
+  $("newProjectCode").addEventListener("change", lookupProjectNumber);
+  $("newProjectCode").addEventListener("blur", lookupProjectNumber);
 
   $("navLibrary").onclick = () => showView("library");
   $("navCalculation").onclick = () => showView("calculation");
@@ -1154,10 +1482,12 @@ function wire() {
   $("versionsButton").onclick = showVersions;
   $("saveCalculation").onclick = () => saveCalculation().catch(() => {});
 
-  $("newCalculation").onclick = () => {
-    if (!state.project) return toast("Open a project first", true);
-    $("moduleDialog").showModal();
-  };
+  $("newCalculation").onclick = openModuleDialog;
+  $("newCalculationCalc").onclick = openModuleDialog;
+  $("moduleSearch").addEventListener("input", renderModuleBrowser);
+  $("importPdf").onclick = openImportDialog;
+  $("importPick").onclick = () => pickFolder("importPath", "file");
+  $("importCreate").onclick = importPdfCalculation;
   $("refreshLibrary").onclick = refreshLibrary;
   $("adoptExisting").onclick = async () => {
     try {
@@ -1168,11 +1498,25 @@ function wire() {
       toast(`${data.adopted} existing calculation(s) indexed`);
     } catch (error) { toast(error.message, true); }
   };
-  ["librarySearch", "libraryPackage", "libraryLevel", "libraryModule", "libraryCalcType",
-    "libraryShowSuperseded"].forEach(id => {
-      $(id).addEventListener("input", refreshLibrary);
-      $(id).addEventListener("change", refreshLibrary);
-    });
+  ["package", "level", "module", "calcType"].forEach(key => {
+    state.filters[key] = multiSelect(
+      `library${key.charAt(0).toUpperCase()}${key.slice(1)}`,
+      { package: "Package", level: "Level", module: "Module", calcType: "Calculation type" }[key],
+      refreshLibrary);
+  });
+  $("librarySort").innerHTML = INDEX_SORTS.map(item =>
+    `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("");
+  $("librarySort").addEventListener("change", () => renderLibrary(true));
+  $("libraryClear").onclick = () => {
+    Object.values(state.filters).forEach(filter => filter.clear());
+    $("librarySearch").value = "";
+    $("libraryShowSuperseded").checked = false;
+    refreshLibrary();
+  };
+  ["librarySearch", "libraryShowSuperseded"].forEach(id => {
+    $(id).addEventListener("input", refreshLibrary);
+    $(id).addEventListener("change", refreshLibrary);
+  });
   $("refreshTree").onclick = refreshLibrary;
 
   ["pkgPackage", "pkgLevel", "pkgMemberType", "pkgCalcType", "pkgSort1", "pkgSort2", "pkgSort3",
@@ -1204,8 +1548,8 @@ function wire() {
   document.querySelectorAll("[data-close]").forEach(button =>
     button.onclick = () => button.closest("dialog").close());
 
-  ["idMemberType", "idMemberNumber", "idPackage", "idLevel", "idSubject", "idChecker", "idDesigner"]
-    .forEach(id => $(id).addEventListener("input", () => setDirty(true)));
+  ["idMemberType", "idMemberNumber", "idPackage", "idLevel", "idSubject", "idDesigner",
+    "idDescription"].forEach(id => $(id).addEventListener("input", () => setDirty(true)));
   $("idSubject").addEventListener("input", scheduleCalculation);
 
   document.addEventListener("keydown", event => {

@@ -86,6 +86,28 @@ def describe(folder_path: str) -> dict[str, Any]:
             "code": code, "clientRef": client, "projectName": project}
 
 
+def project_root(folder_path: Any) -> str:
+    """Climb a chosen folder back up to the project's own top level folder.
+
+    Picking ``...\\J3657 - ABC - Warehouse\\09-Doc_WRK\\01-CAL`` must register the
+    project, not the sub-folder, so the Innovis skeleton is never built in the
+    wrong place.
+    """
+    path = str(folder_path or "").strip().rstrip("\\/")
+    if not path:
+        return path
+    current = os.path.normpath(path)
+    best = ""
+    while True:
+        if looks_like_project(os.path.basename(current)):
+            best = current
+        parent = os.path.dirname(current)
+        if not parent or parent == current:
+            break
+        current = parent
+    return best or path
+
+
 def _child_dirs(path: str) -> Iterator[os.DirEntry]:
     try:
         with os.scandir(path) as entries:
@@ -245,6 +267,25 @@ class Discovery:
         return {"code": code, "source": source, "scanning": scanning,
                 "matches": [describe(path) for path in ordered]}
 
+    def search(self, value: Any, limit: int = 40) -> dict[str, Any]:
+        """Find by project number or by any part of the client or project name."""
+        needle = str(value or "").strip()
+        if len(needle) < 2:
+            return {"query": needle, "scanning": False, "matches": []}
+        if re.fullmatch(r"[A-Za-z]?\d{2,6}[A-Za-z]?", needle):
+            return {"query": needle, **self.find(needle)}
+        folded = needle.casefold()
+        hits = [path for paths in self.data["projects"].values() for path in paths
+                if folded in os.path.basename(path).casefold()]
+        scanning = False
+        if not hits and not self.data.get("scannedAt"):
+            scanning = True
+            self.refresh_async()
+        ordered = sorted(set(hits), key=lambda path: os.path.basename(path).casefold())
+        return {"query": needle, "source": "index", "scanning": scanning,
+                "matches": [describe(path) for path in ordered[:limit]
+                            if os.path.isdir(path)]}
+
 
 # ---------------------------------------------------------------------------
 #  Registry
@@ -282,19 +323,24 @@ class ProjectRegistry:
 
     # -- mutation -----------------------------------------------------------
     def register(self, folder_path: str, actor: dict[str, Any],
-                 create_folders: bool = False) -> dict[str, Any]:
-        """Add (or return) a project for a folder, optionally creating the folder."""
-        folder = Path(str(folder_path).strip().rstrip("\\/"))
+                 create_folders: bool = True) -> dict[str, Any]:
+        """Add (or return) a project, creating the folder and skeleton as needed.
+
+        A folder chosen below the project's own level is walked back up, so the
+        registered project is always ``...\\JXXXX - CLIENT - PROJECT NAME``.
+        """
+        folder = Path(project_root(folder_path))
         if not str(folder):
             raise ValueError("A project folder is required")
         if not folder.is_absolute():
             raise ValueError("The project folder must be a full path")
         if create_folders:
             folder.mkdir(parents=True, exist_ok=True)
-            for branch in PROJECT_SKELETON:
-                (folder / branch).mkdir(parents=True, exist_ok=True)
         if not folder.is_dir():
             raise ValueError(f"The folder does not exist: {folder}")
+        if create_folders:
+            for branch in PROJECT_SKELETON:
+                (folder / branch).mkdir(parents=True, exist_ok=True)
         existing = self.by_path(folder)
         if existing:
             existing.update(describe(str(folder)))
@@ -304,6 +350,24 @@ class ProjectRegistry:
                    "createdAt": datetime.now().isoformat(timespec="seconds"),
                    "createdBy": actor.get("email", ""), "designers": [], "verifiers": []}
         self.data["projects"][project["id"]] = project
+        self.write()
+        return project
+
+    def relink(self, project_id: str, folder_path: str) -> dict[str, Any]:
+        """Point an existing project at a new folder after a move or a broken link."""
+        project = self.get(project_id)
+        folder = Path(project_root(folder_path))
+        if not folder.is_dir():
+            raise ValueError(f"The folder does not exist: {folder}")
+        clash = self.by_path(folder)
+        if clash and clash["id"] != project["id"]:
+            raise ValueError("Another project in your list already uses that folder")
+        for branch in PROJECT_SKELETON:
+            (folder / branch).mkdir(parents=True, exist_ok=True)
+        described = describe(str(folder))
+        project["folderPath"] = described["folderPath"]
+        project["folderName"] = described["folderName"]
+        project["group"] = described["group"]
         self.write()
         return project
 
@@ -338,8 +402,18 @@ class ProjectRegistry:
         self.write()
 
     def forget(self, project_id: str, actor: dict[str, Any]) -> None:
-        """Remove a project from one person's list; the folder is never touched."""
+        """Remove a project from one person's list; the folder is never touched.
+
+        Opening a project adds you to its designers, so the membership record
+        alone is not enough - the person has to come off the project's own lists
+        as well or it reappears at the next refresh.
+        """
         self.data["members"].get(actor["email"], {}).pop(project_id, None)
+        project = self.data["projects"].get(str(project_id))
+        if project:
+            for role in ("designers", "verifiers"):
+                project[role] = [item for item in project.get(role, [])
+                                 if str(item).casefold() != str(actor["email"]).casefold()]
         self.write()
 
     # -- presentation -------------------------------------------------------

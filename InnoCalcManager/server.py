@@ -21,7 +21,9 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import queue
 import string
+import subprocess
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -31,10 +33,10 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 from icm import VERSION, VERSION_HISTORY
 from icm import auth as auth_module
-from icm import collate, pdf as pdf_tools, qa as qa_module
+from icm import collate, mail, pdf as pdf_tools, qa as qa_module
 from icm.library import Library
-from icm.projects import Discovery, ProjectRegistry, describe, normalise_code
-from icm.registry import Registry
+from icm.projects import Discovery, ProjectRegistry, normalise_code, project_root
+from icm.registry import CATEGORIES, Registry
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("ICM_PORT", "8125"))
@@ -53,6 +55,54 @@ STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; ch
                 ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
                 ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon",
                 ".woff2": "font/woff2"}
+
+
+# --------------------------------------------------------------------------
+#  Background PDF printing
+# --------------------------------------------------------------------------
+class PdfWorker:
+    """Prints saved calculations to PDF away from the request thread.
+
+    Printing runs headless Chromium, which costs a few seconds of process start
+    every time and is serialised by a lock inside ``calcpad``.  Saving therefore
+    returns as soon as the calculation and its index entry are on the drive, and
+    the sheet is printed behind it; the interface shows the state of both.
+    """
+
+    def __init__(self) -> None:
+        self.queue: queue.Queue[tuple[str, str, str]] = queue.Queue()
+        self.state: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+        self._thread = threading.Thread(target=self._run, name="icm-pdf", daemon=True)
+        self._thread.start()
+
+    def submit(self, key: str, html_path: str, pdf_path: str) -> None:
+        with self._lock:
+            self.state[key] = {"status": "printing", "pdfPath": pdf_path, "error": ""}
+        self.queue.put((key, html_path, pdf_path))
+
+    def status(self, key: str) -> dict[str, Any]:
+        with self._lock:
+            return dict(self.state.get(key) or {"status": "unknown", "error": ""})
+
+    def pending(self) -> int:
+        with self._lock:
+            return sum(1 for item in self.state.values() if item["status"] == "printing")
+
+    def _run(self) -> None:
+        while True:
+            key, html_path, pdf_path = self.queue.get()
+            try:
+                pdf_tools.export_pdf(html_path, pdf_path)
+                outcome = {"status": "ready", "pdfPath": pdf_path, "error": ""}
+            except (RuntimeError, OSError) as exc:
+                outcome = {"status": "failed", "pdfPath": pdf_path, "error": str(exc)}
+            with self._lock:
+                self.state[key] = outcome
+            self.queue.task_done()
+
+
+PDF_WORKER = PdfWorker()
 
 
 # --------------------------------------------------------------------------
@@ -135,13 +185,34 @@ def library_for(project: dict[str, Any]) -> Library:
 
 def project_meta(project: dict[str, Any], actor: dict[str, Any],
                  overrides: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Identity block shared by every calculation in a project."""
+    """Identity block shared by every calculation in a project.
+
+    ``checker`` is deliberately absent from the overrides a caller may supply:
+    it is written by :meth:`icm.qa.QAStore.endorse` when the verifier closes the
+    verification out, and never typed by the designer.
+    """
     meta = {"client": project.get("clientRef", ""), "project": project.get("projectName", ""),
             "projectno": project.get("code", ""), "designer": actor.get("initials", ""),
             "checker": "", "projectFolder": project.get("folderPath", "")}
     meta.update({key: value for key, value in (overrides or {}).items()
-                 if key in {"client", "project", "projectno", "designer", "checker", "title"}})
+                 if key in {"client", "project", "projectno", "designer", "title"}})
     return meta
+
+
+def reveal(path: str) -> dict[str, Any]:
+    """Show a file or folder in Windows Explorer."""
+    if not path or not within_project(path):
+        raise ValueError("That location is not inside one of your projects")
+    target = Path(path)
+    if not target.exists():
+        raise ValueError(f"Not found: {path}")
+    if os.name != "nt":
+        return {"ok": False, "error": "Explorer is only available on Windows"}
+    if target.is_dir():
+        subprocess.Popen(["explorer", str(target)])  # noqa: S603,S607 - fixed command
+    else:
+        subprocess.Popen(["explorer", "/select,", str(target)])  # noqa: S603,S607
+    return {"ok": True, "path": str(target)}
 
 
 def within_project(path: str) -> bool:
@@ -213,10 +284,12 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/projects/discovery": self._discovery_status,
                 "/api/library": self._library,
                 "/api/calculation": self._calculation,
+                "/api/calculation/pdf": self._pdf_status,
                 "/api/browse": lambda q: browse(q.get("path", [""])[0]),
                 "/api/files": lambda q: list_files(q.get("path", [""])[0],
                                                    q.get("suffix", [""])[0]),
                 "/api/pick": self._pick,
+                "/api/reveal": self._reveal,
                 "/api/file": None,
                 "/api/qa": self._qa_list,
                 "/api/qa/status": self._qa_status,
@@ -244,14 +317,15 @@ class Handler(BaseHTTPRequestHandler):
     ROUTES = {
         "/api/auth/signin", "/api/auth/signout",
         "/api/projects/create", "/api/projects/open", "/api/projects/find",
+        "/api/projects/search", "/api/projects/relink",
         "/api/projects/refresh", "/api/projects/archive", "/api/projects/forget",
         "/api/projects/people", "/api/projects/adopt", "/api/projects/rename",
         "/api/calculate", "/api/module/action", "/api/module/validate",
         "/api/calculation/save", "/api/calculation/update", "/api/calculation/delete",
-        "/api/calculation/exchange",
+        "/api/calculation/exchange", "/api/calculation/import",
         "/api/package/preview", "/api/package/build",
         "/api/qa/create", "/api/qa/update", "/api/qa/comment/add", "/api/qa/comment/update",
-        "/api/qa/markups", "/api/qa/endorse", "/api/qa/export",
+        "/api/qa/markups", "/api/qa/endorse", "/api/qa/export", "/api/qa/scan",
     }
 
     def do_POST(self):
@@ -272,6 +346,8 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/projects/create": self._create_project,
                 "/api/projects/open": self._open_project,
                 "/api/projects/find": self._find_project,
+                "/api/projects/search": self._search_projects,
+                "/api/projects/relink": self._relink_project,
                 "/api/projects/refresh": self._refresh_projects,
                 "/api/projects/archive": self._archive_project,
                 "/api/projects/forget": self._forget_project,
@@ -285,6 +361,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/calculation/update": self._update_calculation,
                 "/api/calculation/delete": self._delete_calculation,
                 "/api/calculation/exchange": self._exchange_calculation,
+                "/api/calculation/import": self._import_calculation,
                 "/api/package/preview": self._package_preview,
                 "/api/package/build": self._package_build,
                 "/api/qa/create": self._qa_create,
@@ -294,6 +371,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/qa/markups": self._qa_markups,
                 "/api/qa/endorse": self._qa_endorse,
                 "/api/qa/export": self._qa_export,
+                "/api/qa/scan": self._qa_scan,
             }[parsed.path](payload))
         except PermissionError as exc:
             self._send(401, {"ok": False, "error": str(exc)})
@@ -312,7 +390,8 @@ class Handler(BaseHTTPRequestHandler):
                 "version": VERSION}
 
     def _modules(self, _query) -> dict[str, Any]:
-        return {"ok": True, "modules": MODULES.catalogue(), "problems": MODULES.problems}
+        return {"ok": True, "modules": MODULES.catalogue(), "categories": CATEGORIES,
+                "problems": MODULES.problems}
 
     def _module_schema(self, query) -> dict[str, Any]:
         module = MODULES.get(query.get("module", [""])[0])
@@ -352,8 +431,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _create_project(self, payload) -> dict[str, Any]:
         actor = self._actor(payload.get("token"))
-        project = PROJECTS.register(str(payload.get("path", "")), actor,
-                                    bool(payload.get("createFolders")))
+        project = PROJECTS.register(str(payload.get("path", "")), actor)
         fields = {key: payload[key] for key in ("code", "clientRef", "projectName")
                   if payload.get(key)}
         if fields:
@@ -384,6 +462,18 @@ class Handler(BaseHTTPRequestHandler):
     def _find_project(self, payload) -> dict[str, Any]:
         self._actor(payload.get("token"))
         return {"ok": True, **DISCOVERY.find(normalise_code(payload.get("code")))}
+
+    def _search_projects(self, payload) -> dict[str, Any]:
+        """Resolve a project by number or by any part of its name."""
+        self._actor(payload.get("token"))
+        return {"ok": True, **DISCOVERY.search(payload.get("query"))}
+
+    def _relink_project(self, payload) -> dict[str, Any]:
+        actor = self._actor(payload.get("token"))
+        project = PROJECTS.relink(str(payload.get("projectId", "")),
+                                  str(payload.get("path", "")))
+        DISCOVERY.remember(project["folderPath"])
+        return {"ok": True, "project": project, "projects": PROJECTS.for_user(actor)}
 
     def _refresh_projects(self, payload) -> dict[str, Any]:
         self._actor(payload.get("token"))
@@ -420,8 +510,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _pick(self, query) -> dict[str, Any]:
         self._actor(query.get("token", [""])[0])
-        return native_pick(query.get("title", ["Select project folder"])[0],
-                           query.get("mode", [""])[0] == "file")
+        picked = native_pick(query.get("title", ["Select project folder"])[0],
+                             query.get("mode", [""])[0] == "file")
+        if picked.get("path") and query.get("scope", [""])[0] == "project":
+            picked["path"] = project_root(picked["path"])
+        return picked
+
+    def _reveal(self, query) -> dict[str, Any]:
+        self._actor(query.get("token", [""])[0])
+        return reveal(query.get("path", [""])[0])
 
     # ----------------------------------------------------------- calculation
     def _calculate(self, payload) -> dict[str, Any]:
@@ -452,19 +549,23 @@ class Handler(BaseHTTPRequestHandler):
         actor, project = self._project(query.get("token", [""])[0],
                                        query.get("project", [""])[0])
         library = library_for(project)
+        # Repeated query keys carry the multi-select filters, e.g. package=A&package=B.
         return {"ok": True, "library": library.index(
             show_superseded=query.get("showSuperseded", ["0"])[0] == "1",
             search=query.get("search", [""])[0],
-            package=query.get("package", [""])[0],
-            module_id=query.get("module", [""])[0],
-            level=query.get("level", [""])[0],
-            calc_type=query.get("calcType", [""])[0])}
+            package=query.get("package", []),
+            module_id=query.get("module", []),
+            level=query.get("level", []),
+            calc_type=query.get("calcType", []))}
 
     def _calculation(self, query) -> dict[str, Any]:
         actor, project = self._project(query.get("token", [""])[0],
                                        query.get("project", [""])[0])
-        record = library_for(project).calculation(query.get("id", [""])[0])
-        return {"ok": True, "calculation": record,
+        library = library_for(project)
+        record = library.calculation(query.get("id", [""])[0])
+        return {"ok": True,
+                "calculation": {**record, "folder": str(library.folder_of(record)),
+                                "pdfPath": str(library.pdf_of(record) or "")},
                 "meta": project_meta(project, actor)}
 
     def _save_calculation(self, payload) -> dict[str, Any]:
@@ -472,26 +573,52 @@ class Handler(BaseHTTPRequestHandler):
         module = MODULES.get(payload.get("module"))
         inputs = dict(payload.get("inputs") or {})
         inputs.update(project_meta(project, actor, payload.get("meta")))
+        library = library_for(project)
+        # The verifier owns 'Checked by'; carry forward whatever they endorsed.
+        existing = str(payload.get("calculationId", ""))
+        if existing:
+            try:
+                inputs["checker"] = library.calculation(existing).get("checker", "")
+            except ValueError:
+                inputs["checker"] = ""
         result = module.call("compute", inputs)
         summary = module.call("summarise", result)
         identity = module.call("identity", inputs)
         html_text = module.call("render", inputs, result, standalone=True)
-        library = library_for(project)
         saved = library.save(module_id=module.id, module_folder=MODULES.folder_for(module.id),
                              inputs=inputs, identity=identity, summary=summary,
                              html_text=html_text, initials=actor.get("initials", ""),
-                             calculation_id=str(payload.get("calculationId", "")),
+                             calculation_id=existing,
                              supersede=bool(payload.get("supersede", True)))
         if saved.get("conflict"):
             return {"ok": True, **saved}
-        try:
-            pdf_tools.export_pdf(saved["htmlPath"], saved["pdfPath"])
-            saved["pdf"] = True
-        except (RuntimeError, OSError) as exc:
-            saved["pdf"] = False
-            saved["pdfError"] = str(exc)
-        return {"ok": True, **saved, "summary": summary, "identity": identity,
-                "library": library.index()}
+        # Printing takes seconds; the drive already holds the calculation, so the
+        # sheet is printed behind the response and the interface tracks it.
+        PDF_WORKER.submit(saved["calculationId"], saved["htmlPath"], saved["pdfPath"])
+        return {"ok": True, **saved, "pdf": "printing", "summary": summary,
+                "identity": identity, "library": library.index()}
+
+    def _pdf_status(self, query) -> dict[str, Any]:
+        self._actor(query.get("token", [""])[0])
+        return {"ok": True, "pending": PDF_WORKER.pending(),
+                **PDF_WORKER.status(query.get("id", [""])[0])}
+
+    def _import_calculation(self, payload) -> dict[str, Any]:
+        """Index a calculation prepared in other software, held as PDF only."""
+        actor, project = self._project(payload.get("token"), payload.get("projectId"))
+        library = library_for(project)
+        imported = library.import_pdf(
+            source=str(payload.get("path", "")),
+            member_type=str(payload.get("memberType", "")),
+            number=str(payload.get("memberNumber", "")),
+            package=str(payload.get("package", "")),
+            level=str(payload.get("level", "")),
+            title=str(payload.get("title", "")),
+            description=str(payload.get("description", "")),
+            calc_type=str(payload.get("calcType", "")),
+            initials=actor.get("initials", ""),
+            origin=str(payload.get("origin", "")))
+        return {"ok": True, **imported, "library": library.index()}
 
     def _update_calculation(self, payload) -> dict[str, Any]:
         actor, project = self._project(payload.get("token"), payload.get("projectId"))
@@ -540,14 +667,54 @@ class Handler(BaseHTTPRequestHandler):
         library = library_for(project)
         meta = project_meta(project, actor, payload.get("meta"))
         meta["title"] = str((payload.get("meta") or {}).get("title") or "Calculation package")
-        destination = Path(project["folderPath"]) / "09-Doc_WRK" / "01-CAL" / "10-IN_TOOL" \
-            / "packages" / f"{qa_module.safe_name(meta['title'])}.pdf"
+        purpose = str((payload.get("meta") or {}).get("reason") or "Internal Review")
+        ref = qa_module.next_reference(library, project, "STR")
+        folder = Path(project["folderPath"]) / "09-Doc_WRK" / "01-CAL" / "10-IN_TOOL" / "packages"
+        destination = folder / f"{qa_module.safe_name(ref + ' - ' + meta['title'])}.pdf"
         built = collate.build_pdf(library, MODULES, list(payload.get("selection") or []), meta,
                                   destination, sort_fields=payload.get("sort"),
                                   include_superseded=bool(payload.get("includeSuperseded")),
-                                  drawings=payload.get("drawings"))
-        return {"ok": True, **built,
+                                  drawings=payload.get("drawings"), reference=ref,
+                                  purpose=purpose,
+                                  verifier_initials=str((payload.get("meta") or {})
+                                                        .get("verifierInitials", "")))
+        issue = library.record_issue({
+            "ref": ref, "title": meta["title"], "reason": purpose,
+            "issuedBy": actor.get("initials", ""), "sheets": built["sheets"],
+            "pdfPath": built["pdfPath"], "drawingsPath": built["drawingsPath"],
+            "folder": str(folder), "calculations": len(built["entries"]),
+            "watermark": built["watermark"]})
+        draft = self._issue_draft(project, actor, payload, issue, built)
+        try:
+            reveal(str(folder))
+        except (ValueError, OSError):
+            pass
+        return {"ok": True, **built, "issue": issue, "draft": draft,
+                "issues": list(reversed(library.data.get("issues", []))),
                 "url": "/api/file?" + urlencode({"path": built["pdfPath"]})}
+
+    @staticmethod
+    def _issue_draft(project, actor, payload, issue, built) -> dict[str, Any]:
+        """Raise a draft email to the reviewer whenever one is nominated."""
+        to = str((payload.get("meta") or {}).get("reviewerEmail", "")).strip()
+        if not to:
+            return {"path": "", "opened": False}
+        try:
+            return mail.draft_for_package(
+                folder=issue["folder"], name=f"{issue['ref']} - {issue['reason']}",
+                to=to,
+                subject=(f"{project.get('code', '')} {project.get('projectName', '')} - "
+                         f"{issue['ref']} - {issue['title']} - {issue['reason']}").strip(),
+                intro=(f"The calculation package below is issued for {issue['reason'].lower()}. "
+                       f"Please mark any comments on the PDF and return it to the package "
+                       f"folder."),
+                project=project, links=[("Calculation package", built["pdfPath"]),
+                                        ("Drawings", built["drawingsPath"]),
+                                        ("Package folder", issue["folder"])],
+                sender=actor.get("email", ""),
+                closing=f"Prepared by {actor.get('displayName', '')}.")
+        except OSError as exc:
+            return {"path": "", "opened": False, "error": str(exc)}
 
     # -------------------------------------------------------------------- QA
     @staticmethod
@@ -562,10 +729,21 @@ class Handler(BaseHTTPRequestHandler):
     def _qa_list(self, query) -> dict[str, Any]:
         actor, project, library, store = self._qa_store(query.get("token", [""])[0],
                                                         query.get("project", [""])[0])
+        # A verifier returns a marked-up PDF to the package folder, so every
+        # refresh reads those files rather than waiting for an explicit import.
+        found = store.scan_returns(actor) if query.get("scan", ["1"])[0] == "1" else {"added": 0}
         packages = [self._qa_public(item) for item in store.packages
                     if store.can_access(item, actor)]
         return {"ok": True, "packages": packages, "template": qa_module.form_template(),
-                "summary": store.status_summary()}
+                "imported": found.get("added", 0), "summary": store.status_summary()}
+
+    def _qa_scan(self, payload) -> dict[str, Any]:
+        actor, project, library, store = self._qa_store(payload.get("token"),
+                                                        payload.get("projectId"))
+        found = store.scan_returns(actor)
+        packages = [self._qa_public(item) for item in store.packages
+                    if store.can_access(item, actor)]
+        return {"ok": True, **found, "packages": packages}
 
     def _qa_status(self, query) -> dict[str, Any]:
         """Verification status across every project the person can see."""
@@ -598,6 +776,7 @@ class Handler(BaseHTTPRequestHandler):
             reviewer_initials=str(payload.get("reviewerInitials", "")),
             drawing_set=payload.get("drawingSet"))
         return {"ok": True, "package": self._qa_public(package),
+                "draft": package.get("draftEmail") or {},
                 "url": "/api/file?" + urlencode({"path": package["calculationPdf"]})}
 
     def _qa_guard(self, store, package_id, actor):

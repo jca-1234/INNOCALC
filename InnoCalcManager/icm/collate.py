@@ -1,13 +1,16 @@
 """Collate finalised calculations into one PDF with a linked contents page.
 
-The whole calculation body is rendered as a single HTML document and printed
+The native calculation body is rendered as a single HTML document and printed
 once, so the contents entries and the ``Contents`` link on every sheet become
-genuine PDF links.  Drawing sets and PDF inserts are spliced in afterwards.
+genuine PDF links.  Calculations imported as PDF, drawing sets and PDF inserts
+are spliced into their proper place afterwards, and the issued package is
+watermarked and flattened.
 """
 
 from __future__ import annotations
 
 import html
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,7 +18,7 @@ from typing import Any
 import calcpad
 
 from . import pdf as pdf_tools
-from .library import Library
+from .library import IMPORTED, Library, safe_name
 
 SORT_FIELDS = [
     {"id": "package", "label": "Package"},
@@ -44,6 +47,7 @@ def selectable(library: Library, *, include_superseded: bool = False) -> list[di
             "memberType": record.get("memberType", ""),
             "memberNumber": record.get("memberNumber", ""),
             "title": record.get("title", ""), "status": record.get("status", ""),
+            "description": record.get("description", ""),
             "worstUtil": record.get("worstUtil", 0.0),
             "criticalCheck": record.get("criticalCheck", ""),
             "finalised": bool(record.get("finalised")),
@@ -67,9 +71,11 @@ def _contents_sheet(meta: dict[str, Any], entries: list[dict[str, Any]]) -> str:
     rows = []
     for entry in entries:
         util = (f"{entry['worstUtil'] * 100:.0f}%" if entry.get("worstUtil") else "-")
+        label = html.escape(entry["title"] or entry["memberType"])
+        name = (f'<a href="#{html.escape(entry["anchor"])}">{label}</a>'
+                if entry.get("anchor") else label)
         rows.append(
-            f'<tr><td><a href="#{html.escape(entry["anchor"])}">'
-            f'{html.escape(entry["title"] or entry["memberType"])}</a></td>'
+            f'<tr><td>{name}</td>'
             f'<td>{html.escape(entry.get("package", ""))}</td>'
             f'<td>{html.escape(entry.get("level", ""))}</td>'
             f'<td>{html.escape(entry.get("calcType", ""))}</td>'
@@ -96,7 +102,13 @@ def _contents_sheet(meta: dict[str, Any], entries: list[dict[str, Any]]) -> str:
 def build_html(library: Library, registry: Any, selection: list[str], meta: dict[str, Any],
                *, sort_fields: list[str] | None = None,
                include_superseded: bool = False) -> dict[str, Any]:
-    """One HTML document: contents sheet, then every selected calculation."""
+    """Plan the package: the printable body, and where every PDF part belongs.
+
+    Calculations produced in other software are held as PDF only, so the body is
+    printed from the native calculations alone and the imported sheets are
+    spliced into their proper place afterwards.  ``inserts`` records where each
+    one goes, which is what keeps the contents page sheet numbers honest.
+    """
     wanted = list(dict.fromkeys(selection or []))
     available = {item["id"]: item for item in selectable(library, include_superseded=include_superseded)}
     entries = order([available[item] for item in wanted if item in available], sort_fields)
@@ -105,26 +117,42 @@ def build_html(library: Library, registry: Any, selection: list[str], meta: dict
 
     sheets: list[str] = []
     inserts: list[dict[str, Any]] = []
-    sheet_number = 2  # sheet 1 is the contents page
+    body_page = 1          # the contents sheet is body page 1
+    sheet_number = 2
     for position, entry in enumerate(entries, start=1):
         record = library.calculation(entry["id"])
+        entry["startSheet"] = sheet_number
+        if record.get("module") == IMPORTED:
+            source = library.folder_of(record) / record["revisions"][-1]["filename"]
+            count = pdf_tools.page_count(source) or 1
+            entry["imported"] = True
+            entry["sheets"] = count
+            inserts.append({"path": str(source), "pages": "", "after": body_page})
+            sheet_number += count
+            continue
+
         module = registry.get(record["module"])
         anchor = f"calc-{position:03d}"
         entry["anchor"] = anchor
-        entry["startSheet"] = sheet_number
         inputs = {**(record.get("inputs") or {}), **{key: meta[key] for key in
                                                      ("client", "project", "projectno",
-                                                      "designer", "checker") if key in meta}}
+                                                      "designer") if key in meta},
+                  "checker": record.get("checker", "")}
         result = module.call("compute", inputs)
         body = module.call("render", inputs, result, standalone=False,
                            anchor_prefix=anchor, contents_href="#innocalc-contents")
         sheets.append(body)
-        entry["sheets"] = body.count('class="calc-page"')
-        sheet_number += entry["sheets"]
+        printed = body.count('class="calc-page"') or 1
+        body_page += printed
+        entry["sheets"] = printed
         for cell in result.get("attachments") or []:
-            if cell.get("exists"):
-                inserts.append({"path": cell["path"], "pages": cell.get("pages", ""),
-                                "title": cell.get("title", "")})
+            if not cell.get("exists"):
+                continue
+            pages = pdf_tools.parse_pages(cell.get("pages"), pdf_tools.page_count(cell["path"]))
+            inserts.append({"path": cell["path"], "pages": cell.get("pages", ""),
+                            "title": cell.get("title", ""), "after": body_page})
+            entry["sheets"] += len(pages) or 1
+        sheet_number += entry["sheets"]
 
     contents_inputs = {**meta, "memberType": "", "memberNumber": "",
                        "subject": meta.get("title") or "Calculation package"}
@@ -138,14 +166,34 @@ def build_html(library: Library, registry: Any, selection: list[str], meta: dict
                 f'<div class="report-document">{contents}{"".join(sheets)}</div>'
                 "</body></html>")
     return {"html": document, "entries": entries, "inserts": inserts,
-            "sheets": sheet_number - 1}
+            "bodyPages": body_page, "sheets": sheet_number - 1}
+
+
+def drawings_name(reference: str, title: str, initials: str) -> str:
+    """'JXXXX-STR-VER-0001 - TITLE - DRAWINGS - AB'."""
+    reference = str(reference or "").strip() or "PACKAGE"
+    initials = re.sub(r"[^A-Za-z]", "", str(initials)).upper()[:4] or "XX"
+    return safe_name(f"{reference} - {str(title or 'PACKAGE').upper()} - DRAWINGS - {initials}")
+
+
+def watermark_text(purpose: str, when: datetime | None = None) -> str:
+    stamp = (when or datetime.now()).strftime("%d/%m/%Y")
+    return f"PACKAGE PREPARED {stamp} FOR {str(purpose or 'ISSUE').upper()}"
 
 
 def build_pdf(library: Library, registry: Any, selection: list[str], meta: dict[str, Any],
               destination: Path, *, sort_fields: list[str] | None = None,
               include_superseded: bool = False,
-              drawings: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Write the collated calculation package as HTML and PDF."""
+              drawings: list[dict[str, Any]] | None = None,
+              reference: str = "", purpose: str = "",
+              verifier_initials: str = "") -> dict[str, Any]:
+    """Write the collated calculation package as HTML and PDF.
+
+    Drawings are issued twice: once as a flattened standalone file named for the
+    package, and again appended to the rear of the combined document.  The
+    combined document is watermarked with the issue purpose and flattened, so an
+    issued package cannot be edited and is ready for the verifier's markups.
+    """
     built = build_html(library, registry, selection, meta, sort_fields=sort_fields,
                        include_superseded=include_superseded)
     destination = Path(destination)
@@ -155,21 +203,42 @@ def build_pdf(library: Library, registry: Any, selection: list[str], meta: dict[
     body_pdf = destination.with_name(destination.stem + " - body.pdf")
     pdf_tools.export_pdf(html_path, body_pdf)
 
-    parts = [{"path": str(body_pdf)}]
-    parts.extend({"path": item["path"], "pages": item.get("pages", "")}
-                 for item in built["inserts"])
-    parts.extend({"path": item.get("path", ""), "pages": item.get("pages", "")}
-                 for item in (drawings or []))
-    combined = len(parts) > 1
-    if combined:
+    inserts = list(built["inserts"])
+    drawing_parts = [{"path": str(item.get("path", "")), "pages": item.get("pages", "")}
+                     for item in (drawings or []) if item.get("path")]
+    drawings_path = ""
+    if drawing_parts:
+        drawings_path = str(destination.with_name(
+            drawings_name(reference, meta.get("title", ""), verifier_initials) + ".pdf"))
         try:
-            pdf_tools.merge(parts, destination)
-            body_pdf.unlink(missing_ok=True)
+            pdf_tools.merge(drawing_parts, drawings_path)
+            pdf_tools.flatten(drawings_path)
         except RuntimeError:
+            drawings_path = ""
+        # The same drawings also go on the back of the combined document.
+        inserts.extend({**part, "after": built["bodyPages"]} for part in drawing_parts)
+
+    stamp = watermark_text(purpose)
+    combined = True
+    try:
+        if inserts:
+            pdf_tools.splice(body_pdf, inserts, destination)
+            body_pdf.unlink(missing_ok=True)
+        else:
             body_pdf.replace(destination)
-            combined = False
-    else:
+    except RuntimeError:
         body_pdf.replace(destination)
+        combined = False
+    flattened = False
+    try:
+        pdf_tools.stamp(destination, stamp)
+        pdf_tools.flatten(destination)
+        if drawings_path:
+            pdf_tools.stamp(drawings_path, stamp)
+        flattened = True
+    except (RuntimeError, OSError, ValueError):
+        flattened = False
     return {"pdfPath": str(destination), "htmlPath": str(html_path),
+            "drawingsPath": drawings_path, "watermark": stamp, "flattened": flattened,
             "entries": [{key: value for key, value in entry.items()} for entry in built["entries"]],
-            "sheets": built["sheets"], "attachments": len(parts) - 1, "combined": combined}
+            "sheets": built["sheets"], "attachments": len(inserts), "combined": combined}
