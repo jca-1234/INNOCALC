@@ -1,0 +1,15 @@
+# Local runtime and test artefacts
+.scratch/
+.venv/
+__pycache__/
+*.pyc
+*.tmp
+
+# Per-machine data written by the tools
+InnoCalcManager/data/
+ConcreteColumnDesign/data/validation/
+
+# Published as independent Git repositories
+CalculationPad/
+ConcreteColumnDesign/
+SteelMemberDesign/

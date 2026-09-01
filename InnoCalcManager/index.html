@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>InnoCalc Manager</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="/calcpad-theme.css">
+</head>
+<body>
+
+<!-- ------------------------------------------------------------------ sign in -->
+<dialog id="signInDialog">
+  <form id="signInForm" method="dialog">
+    <h1>InnoCalc Manager</h1>
+    <p class="muted" id="signInMode">Checking sign-in method&hellip;</p>
+    <section id="devSignIn">
+      <label>Innovis email<input id="signInEmail" type="email" placeholder="name@innovis.com.au" autocomplete="email" required></label>
+      <div class="two-col">
+        <label>Full name<input id="signInName" autocomplete="name" placeholder="Jarvis Anderson"></label>
+        <label>Initials<input id="signInInitials" maxlength="4" placeholder="JA"></label>
+      </div>
+      <p class="notice">This release uses no passwords. Office 365 single sign-on is configured but not activated.</p>
+      <p id="signInError" class="error"></p>
+      <div class="actions"><button class="primary" type="submit">Continue</button></div>
+    </section>
+    <section id="ssoSignIn" hidden>
+      <p>Sign in with your Innovis Office 365 account.</p>
+      <p id="ssoError" class="error"></p>
+      <div class="actions"><button id="ssoStart" class="primary" type="button">Sign in with Office 365</button></div>
+    </section>
+  </form>
+</dialog>
+
+<!-- ------------------------------------------------------------------ toolbar -->
+<header class="toolbar">
+  <strong>INNOVIS <span id="versionTag">V0.01</span></strong>
+  <span class="muted">InnoCalc Manager</span>
+  <label class="sr-only" for="projectSelect">Project</label>
+  <select id="projectSelect" title="Your projects"><option value="">No project open</option></select>
+  <button id="projectsButton" type="button" title="Manage projects">Projects&hellip;</button>
+  <nav>
+    <button id="navLibrary" class="active">Library</button>
+    <button id="navCalculation">Calculation</button>
+    <button id="navPackage">Package Export</button>
+    <button id="navQa">Verification</button>
+  </nav>
+  <span id="moduleBadge"></span>
+  <span class="spacer"></span>
+  <span class="dirty-dot" title="Unsaved changes"></span>
+  <button id="saveCalculation" class="primary calc-action" hidden>SAVE</button>
+  <button id="versionsButton" type="button">Versions</button>
+  <span id="currentUser"></span>
+</header>
+
+<!-- ------------------------------------------------------------------ library -->
+<section id="libraryView" class="view">
+  <div class="view-head">
+    <h1>Calculation Library</h1>
+    <div class="row-actions">
+      <button id="newCalculation" class="primary">New calculation</button>
+      <button id="adoptExisting" type="button" title="Index calculations filed by the standalone tools">Import existing</button>
+      <button id="refreshLibrary" type="button">Refresh</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="filters">
+      <label>Search<input id="librarySearch" type="search" placeholder="member, package, level, check&hellip;"></label>
+      <label>Package<select id="libraryPackage"><option value="">All</option></select></label>
+      <label>Level<select id="libraryLevel"><option value="">All</option></select></label>
+      <label>Module<select id="libraryModule"><option value="">All</option></select></label>
+      <label>Calculation type<select id="libraryCalcType"><option value="">All</option></select></label>
+      <label class="check" style="flex-direction:row;align-items:center;gap:6px"><input id="libraryShowSuperseded" type="checkbox"> Show superseded</label>
+    </div>
+  </div>
+  <div class="card"><div id="libraryTable"><p class="empty-state">Open a project to see its calculations.</p></div></div>
+</section>
+
+<!-- -------------------------------------------------------------- calculation -->
+<div id="calculationView" class="workspace" hidden>
+  <aside class="navigator">
+    <div class="nav-title"><b>Project Calculations</b><button id="refreshTree" title="Refresh">&#8635;</button></div>
+    <div id="calcTree" class="tree"><p class="muted">Open a project to load calculations.</p></div>
+  </aside>
+  <aside class="inputs" id="inputPanel">
+    <div class="panel-heading"><h1 id="inputTitle">Inputs</h1><span id="calcState">Ready</span></div>
+    <details open><summary>Identity</summary>
+      <div class="field-grid">
+        <label id="identityTypeLabel">Type<input id="idMemberType" list="idMemberTypes" autocomplete="off"></label>
+        <datalist id="idMemberTypes"></datalist>
+        <label id="identityNumberLabel">Number<input id="idMemberNumber" maxlength="12"></label>
+        <label>Package<input id="idPackage" list="idPackages"></label>
+        <datalist id="idPackages"></datalist>
+        <label>Level<input id="idLevel" list="idLevels" placeholder="e.g. L02"></label>
+        <datalist id="idLevels"></datalist>
+        <label class="wide">Subject<input id="idSubject"></label>
+        <label>Checked by<input id="idChecker" maxlength="12"></label>
+        <label>Designer<input id="idDesigner" maxlength="4"></label>
+      </div>
+    </details>
+    <div id="schemaGroups"></div>
+    <div id="schemaOptional"></div>
+    <div id="moduleActions" class="pad-add"></div>
+  </aside>
+  <main id="reportPane" class="report"><div class="empty">Choose a module and open a project to calculate.</div></main>
+</div>
+
+<!-- ----------------------------------------------------------- package export -->
+<section id="packageView" class="view" hidden>
+  <div class="view-head"><h1>Package Export</h1>
+    <div class="row-actions">
+      <button id="packageRefresh" type="button">Refresh</button>
+      <button id="packageBuild" class="primary">Build PDF package</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Select and order</h2>
+    <div class="filters">
+      <label>Package<select id="pkgPackage"><option value="">All</option></select></label>
+      <label>Level<select id="pkgLevel"><option value="">All</option></select></label>
+      <label>Member type<select id="pkgMemberType"><option value="">All</option></select></label>
+      <label>Calculation type<select id="pkgCalcType"><option value="">All</option></select></label>
+      <label>Sort by<select id="pkgSort1"></select></label>
+      <label>then<select id="pkgSort2"></select></label>
+      <label>then<select id="pkgSort3"></select></label>
+      <label class="check" style="flex-direction:row;align-items:center;gap:6px"><input id="pkgFinalisedOnly" type="checkbox"> Finalised only</label>
+      <button id="pkgSelectAll" type="button">Select all</button>
+      <button id="pkgSelectNone" type="button">Select none</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="two-col">
+      <label>Package title<input id="pkgTitle" placeholder="Structural calculations - Stage 1"></label>
+      <label>Drawing review set (PDF)<span class="row-actions"><input id="pkgDrawings" placeholder="Optional combined drawing PDF"><button id="pkgPickDrawings" type="button">Browse</button></span></label>
+    </div>
+  </div>
+  <div class="card"><div id="packageTable"><p class="empty-state">Open a project to build a package.</p></div></div>
+</section>
+
+<!-- ---------------------------------------------------------------- verification -->
+<section id="qaView" class="view" hidden>
+  <div class="view-head"><h1>Verification &amp; QA</h1>
+    <div class="row-actions">
+      <button id="qaNew" class="primary">New verification package</button>
+      <button id="qaStatusButton" type="button">Status across projects</button>
+      <button id="qaRefresh" type="button">Refresh</button>
+    </div>
+  </div>
+  <div class="card"><h2>Verification packages</h2><div id="qaList"><p class="empty-state">Open a project to see its verification record.</p></div></div>
+  <div class="card" id="qaDetailCard" hidden>
+    <h2 id="qaDetailTitle">Package</h2>
+    <div id="qaDetail"></div>
+  </div>
+</section>
+
+<!-- ------------------------------------------------------------------ dialogs -->
+<dialog id="projectsDialog"><div class="dialog-body">
+  <button class="close" data-close type="button">&times;</button>
+  <h1>Projects</h1>
+  <h2>Open a project</h2>
+  <div class="filters">
+    <label>Project number<input id="findCode" placeholder="J3657" maxlength="12"></label>
+    <button id="findButton" type="button">Find</button>
+    <button id="rescanButton" type="button" title="Rebuild the project folder index in the background">Rescan drive</button>
+    <span id="discoveryStatus" class="muted"></span>
+  </div>
+  <div id="findResults"></div>
+  <div class="scroll-box" id="projectList"></div>
+  <h2>Add or create a project</h2>
+  <div class="two-col">
+    <label class="wide">Project folder<span class="row-actions"><input id="newProjectPath" placeholder="J:\Active Projects\J3601 to J3700\J3657 - ABC - Warehouse"><button id="pickFolder" type="button">Browse</button></span></label>
+    <label>Project number<input id="newProjectCode" placeholder="J3657"></label>
+    <label>Client reference<input id="newProjectClient"></label>
+    <label class="wide">Project name<input id="newProjectName"></label>
+    <label class="check"><input id="newProjectCreate" type="checkbox"> Create the folder and Innovis sub-folders if they do not exist</label>
+  </div>
+  <p id="projectsError" class="error"></p>
+  <div class="actions"><button id="addProject" class="primary" type="button">Add project</button><button data-close type="button">Close</button></div>
+</div></dialog>
+
+<dialog id="moduleDialog"><div class="dialog-body">
+  <button class="close" data-close type="button">&times;</button>
+  <h1>New calculation</h1>
+  <p class="muted">Choose the calculation module. Each module supplies its own inputs, calculations and presentation.</p>
+  <div id="moduleCards" class="module-cards"></div>
+  <div class="actions"><button data-close type="button">Cancel</button></div>
+</div></dialog>
+
+<dialog id="peopleDialog"><div class="dialog-body">
+  <button class="close" data-close type="button">&times;</button>
+  <h1>Project team</h1>
+  <p class="muted">Designers may edit calculations. Verifiers may endorse verification packages.</p>
+  <div class="scroll-box" id="peopleList"></div>
+  <h3>Add someone</h3>
+  <div class="two-col"><label>Innovis email<input id="newPersonEmail" type="email" placeholder="name@innovis.com.au"></label>
+  <label>Role<select id="newPersonRole"><option value="designer">Designer</option><option value="verifier">Verifier</option></select></label></div>
+  <p id="peopleError" class="error"></p>
+  <div class="actions"><button id="savePeople" class="primary" type="button">Save team</button><button data-close type="button">Cancel</button></div>
+</div></dialog>
+
+<dialog id="qaDialog"><div class="dialog-body">
+  <button class="close" data-close type="button">&times;</button>
+  <h1>New verification package</h1>
+  <div class="two-col">
+    <label>Package title<input id="qaTitle" placeholder="Stage 1 structural calculations"></label>
+    <label>Reviewer initials<input id="qaReviewerInitials" maxlength="4" placeholder="ABC"></label>
+    <label>Reviewer<select id="qaReviewer"></select></label>
+    <label>Drawing review set (PDF)<span class="row-actions"><input id="qaDrawings" placeholder="Optional"><button id="qaPickDrawings" type="button">Browse</button></span></label>
+  </div>
+  <p class="muted" id="qaFolderPreview"></p>
+  <h2>Verification method</h2>
+  <div id="qaMethods" class="two-col"></div>
+  <label>Other<input id="qaMethodOther"></label>
+  <h2>Designer's statement</h2>
+  <div id="qaStatement" class="scroll-box"></div>
+  <label>Additional comments by producer of output<textarea id="qaProducerComments" rows="2"></textarea></label>
+  <h2>Calculations included</h2>
+  <p class="muted">The current Package Export selection is used. <span id="qaSelectionCount"></span></p>
+  <p id="qaError" class="error"></p>
+  <div class="actions"><button id="qaCreate" class="primary" type="button">Create verification package</button><button data-close type="button">Cancel</button></div>
+</div></dialog>
+
+<dialog id="qaStatusDialog"><div class="dialog-body">
+  <button class="close" data-close type="button">&times;</button>
+  <h1>Verification status</h1>
+  <p class="muted">Status of every project in your list, for the business-wide QA review.</p>
+  <div id="qaStatusTable"></div>
+  <div class="actions"><button data-close type="button">Close</button></div>
+</div></dialog>
+
+<dialog id="learningDialog"><div class="dialog-body">
+  <button class="close" data-close type="button">&times;</button>
+  <h1>Calculation Pad - how it works</h1>
+  <div id="learningBody"></div>
+  <div class="actions"><button data-close type="button">Close</button></div>
+</div></dialog>
+
+<dialog id="versionsDialog"><div class="dialog-body">
+  <button class="close" data-close type="button">&times;</button>
+  <h1>Version control</h1>
+  <div id="versionHistory"></div>
+  <div class="actions"><button data-close type="button">Close</button></div>
+</div></dialog>
+
+<dialog id="unsavedDialog"><div class="dialog-body">
+  <h1>Save this calculation?</h1>
+  <p id="unsavedMessage">You have unsaved changes to this calculation.</p>
+  <div class="actions">
+    <button id="unsavedSave" class="primary" type="button">Save and continue</button>
+    <button id="unsavedDiscard" type="button">Discard changes</button>
+    <button id="unsavedCancel" type="button">Stay here</button>
+  </div>
+</div></dialog>
+
+<div id="toast" role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>
