@@ -1,0 +1,107 @@
+{
+  "source": {
+    "workbook": "Concrete_Formula_502.xls",
+    "module": "Structural Toolkit FORMULA V5.02",
+    "standard": "AS 3600:2018 (Incl. Amendment 1 and 2); AS 2327:2017",
+    "extract": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Formula_502.audit.json",
+    "review": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Formula_502.md",
+    "extractedOn": "2026-09-10",
+    "permittedUse": "Internal transcription evidence for the InnoCalc concrete-parameters module.",
+    "caution": [
+      "The workbook is a printed reference sheet. It has one live input, f'c on the Strength",
+      "sheet, and no design check, so there is no ratio or pass/fail cell to reproduce.",
+      "Formula!M169:U169 was captured only to f'c = 100 MPa, so the AS 2327 value at 120 MPa",
+      "is not asserted here.",
+      "Formula!O119:R119 and Formula!O120:R120 tabulate the stress block factors at only",
+      "32, 40, 50 and 65 MPa, so those four grades are the only published factor evidence."
+    ]
+  },
+  "tolerance": 1e-9,
+  "computeCases": [
+    {
+      "name": "Grade 20 material parameters",
+      "sheetCells": "Formula!M166:M169",
+      "inputs": {"fc": 20, "density": 2400, "fcmiSource": "curve", "cement": "N", "age": 28},
+      "expect": {"material.fcmiTable": 22.0, "material.fcmiCurve": 22.1966,
+                 "material.fcmiAs2327": 22.5}
+    },
+    {
+      "name": "Grade 25 material parameters",
+      "sheetCells": "Formula!N166:N169",
+      "inputs": {"fc": 25, "density": 2400, "fcmiSource": "curve", "cement": "N", "age": 28},
+      "expect": {"material.fcmiTable": 28.0, "material.fcmiCurve": 27.573600000000003,
+                 "material.fcmiAs2327": 27.914062500000004}
+    },
+    {
+      "name": "Grade 32 material and stress block parameters",
+      "sheetCells": "Formula!O117:O120, Formula!O166:O169",
+      "inputs": {"fc": 32, "density": 2400, "fcmiSource": "curve", "cement": "N", "age": 28},
+      "expect": {"material.fcmiTable": 35.0, "material.fcmiCurve": 34.9754,
+                 "material.fcmiAs2327": 35.352000000000004,
+                 "stressBlock.alpha2": 0.8019999999999999,
+                 "stressBlock.alpha1Unbounded": 0.904}
+    },
+    {
+      "name": "Grade 40 material and stress block parameters",
+      "sheetCells": "Formula!P117:P120, Formula!P166:P169",
+      "inputs": {"fc": 40, "density": 2400, "fcmiSource": "curve", "cement": "N", "age": 28},
+      "expect": {"material.fcmiTable": 43.0, "material.fcmiCurve": 43.2546,
+                 "material.fcmiAs2327": 43.650000000000006,
+                 "stressBlock.alpha2": 0.79,
+                 "stressBlock.alpha1Unbounded": 0.88}
+    },
+    {
+      "name": "Grade 50 material and stress block parameters",
+      "sheetCells": "Formula!Q117:Q120, Formula!Q166:Q169",
+      "inputs": {"fc": 50, "density": 2400, "fcmiSource": "curve", "cement": "N", "age": 28},
+      "expect": {"material.fcmiTable": 53.0, "material.fcmiCurve": 53.333600000000004,
+                 "material.fcmiAs2327": 53.71875000000001,
+                 "stressBlock.alpha2": 0.775,
+                 "stressBlock.alpha1Unbounded": 0.85}
+    },
+    {
+      "name": "Grade 65 material and stress block parameters",
+      "sheetCells": "Formula!R117:R120, Formula!R166:R169",
+      "inputs": {"fc": 65, "density": 2400, "fcmiSource": "curve", "cement": "N", "age": 28},
+      "expect": {"material.fcmiTable": 68.0, "material.fcmiCurve": 67.88959999999999,
+                 "material.fcmiAs2327": 68.18906250000002,
+                 "stressBlock.alpha2": 0.7525,
+                 "stressBlock.alpha1Unbounded": 0.8049999999999999}
+    },
+    {
+      "name": "Grade 80 material parameters",
+      "sheetCells": "Formula!S166:S169",
+      "inputs": {"fc": 80, "density": 2400, "fcmiSource": "curve", "cement": "N", "age": 28},
+      "expect": {"material.fcmiTable": 82.0, "material.fcmiCurve": 81.7706,
+                 "material.fcmiAs2327": 81.9}
+    },
+    {
+      "name": "Grade 100 material parameters",
+      "sheetCells": "Formula!T166:T169",
+      "inputs": {"fc": 100, "density": 2400, "fcmiSource": "curve", "cement": "N", "age": 28},
+      "expect": {"material.fcmiTable": 99.0, "material.fcmiCurve": 99.2286,
+                 "material.fcmiAs2327": 99.00000000000001}
+    },
+    {
+      "name": "Grade 120 material parameters and the saved strength gain table",
+      "sheetCells": "Formula!U166:U168, Strength!E9:F14",
+      "inputs": {"fc": 120, "density": 2400, "fcmiSource": "curve", "cement": "N", "age": 28},
+      "expect": {
+        "material.fcmiTable": 115.0,
+        "material.fcmiCurve": 115.4866,
+        "strength.ages.0.normal": 19.2,
+        "strength.ages.0.highEarly": 40.800000000000004,
+        "strength.ages.1.normal": 54.0,
+        "strength.ages.1.highEarly": 72.0,
+        "strength.ages.2.normal": 79.2,
+        "strength.ages.2.highEarly": 93.60000000000001,
+        "strength.ages.3.normal": 120.0,
+        "strength.ages.3.highEarly": 120.0,
+        "strength.ages.4.normal": 148.8,
+        "strength.ages.4.highEarly": 136.79999999999998,
+        "strength.ages.5.normal": 160.8,
+        "strength.ages.5.highEarly": 144.0
+      }
+    }
+  ]
+}

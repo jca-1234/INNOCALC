@@ -1,0 +1,32 @@
+{
+  "client": "Example client",
+  "project": "Concrete parameter transcription check",
+  "projectno": "EX-003",
+  "designer": "",
+  "checker": "",
+  "date": "01/01/2026",
+  "subject": "Concrete design parameters",
+  "memberType": "Grade",
+  "memberNumber": "0001",
+  "package": "Unallocated",
+  "level": "",
+  "description": "N32 parameters with the optional minimum reinforcement and cracking moment groups enabled.",
+  "checks": {
+    "minimumSteel": true,
+    "cracking": true
+  },
+  "fc": 32.0,
+  "density": 2400.0,
+  "fcmiSource": "table",
+  "cement": "N",
+  "age": "28",
+  "sectionType": "rect",
+  "bw": 300.0,
+  "D": 600.0,
+  "ds": 550.0,
+  "fsy": 500.0,
+  "bef": 900.0,
+  "Ds": 150.0,
+  "Zt": 18000000.0,
+  "Zb": 18000000.0
+}

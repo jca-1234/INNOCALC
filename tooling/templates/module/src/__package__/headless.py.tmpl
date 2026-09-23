@@ -1,0 +1,47 @@
+from __future__ import annotations
+
+import tomllib
+from importlib.resources import files
+
+from . import engine, report
+from .version import VERSION
+
+DESCRIPTOR = {**tomllib.loads(files(__package__).joinpath("module.toml").read_text(encoding="utf-8")),
+              "version": VERSION}
+
+
+def descriptor() -> dict:
+    return dict(DESCRIPTOR)
+
+
+def schema() -> dict:
+    return {**descriptor(), "identity": {"typeLabel": "Member type", "numberLabel": "Member number"},
+            "groups": [], "optional": []}
+
+
+def defaults() -> dict:
+    return {"memberType": "Calculation", "memberNumber": "0001", "package": "Unallocated",
+            "level": "", "subject": DESCRIPTOR["defaultSubject"], "checks": {}}
+
+
+def compute(inputs: dict) -> dict:
+    return engine.compute(inputs)
+
+
+def render(inputs: dict, result: dict, *, standalone=False, appendix=None,
+           anchor_prefix="", contents_href="") -> str:
+    return report.render(inputs, result, standalone=standalone, appendix=appendix,
+                         anchor_prefix=anchor_prefix, contents_href=contents_href)
+
+
+def summarise(result: dict) -> dict:
+    return result["summary"]
+
+
+def identity(inputs: dict) -> dict:
+    return {**{key: inputs[key] for key in ("memberType", "memberNumber", "package", "level")},
+            "calcType": DESCRIPTOR["calcType"], "title": inputs["subject"]}
+
+
+def validate(cases=None) -> dict:
+    return {"ok": False, "tested": 0, "failures": ["Engineering implementation and reference evidence required"]}

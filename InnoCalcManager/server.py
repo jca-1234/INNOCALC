@@ -19,6 +19,7 @@ Config: ICM_ROOT   projects root, default J:\\Active Projects
 from __future__ import annotations
 
 import json
+import math
 import mimetypes
 import os
 import queue
@@ -55,6 +56,23 @@ STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; ch
                 ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
                 ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon",
                 ".woff2": "font/woff2"}
+
+
+def finite(value: Any) -> Any:
+    """Replace infinities and NaN with null so the response parses in a browser.
+
+    A utilisation of infinity is a real result - a member with no capacity, or
+    no demand - but JSON has no literal for it and ``JSON.parse`` rejects the
+    ones Python writes, which surfaced as an unreadable reply rather than a
+    calculation.  The printed sheet is rendered server side and is unaffected.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: finite(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [finite(item) for item in value]
+    return value
 
 
 # --------------------------------------------------------------------------
@@ -245,7 +263,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- plumbing -----------------------------------------------------------
     def _send(self, code: int, body: Any, ctype: str = "application/json; charset=utf-8") -> None:
         if isinstance(body, (dict, list)):
-            body = json.dumps(body, default=str)
+            body = json.dumps(finite(body), default=str, allow_nan=False)
         data = body.encode("utf-8") if isinstance(body, str) else body
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -528,10 +546,12 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(inputs, dict):
             raise ValueError("An inputs object is required")
         result = module.call("compute", inputs)
+        # A module may offer an editable on-screen sheet; the printed one never is.
+        render_options = {"interactive": True} if module.takes("render", "interactive") else {}
         return {"ok": True, "result": result,
                 "summary": module.call("summarise", result),
                 "identity": module.call("identity", inputs),
-                "reportHtml": module.call("render", inputs, result)}
+                "reportHtml": module.call("render", inputs, result, **render_options)}
 
     def _module_action(self, payload) -> dict[str, Any]:
         self._actor(payload.get("token"))
@@ -587,6 +607,7 @@ class Handler(BaseHTTPRequestHandler):
         html_text = module.call("render", inputs, result, standalone=True)
         saved = library.save(module_id=module.id, module_folder=MODULES.folder_for(module.id),
                              inputs=inputs, identity=identity, summary=summary,
+                             result=result, descriptor=module.descriptor,
                              html_text=html_text, initials=actor.get("initials", ""),
                              calculation_id=existing,
                              supersede=bool(payload.get("supersede", True)))

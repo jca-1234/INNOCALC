@@ -1,0 +1,9 @@
+from __future__ import annotations
+
+import calcpad
+
+
+def render(inputs: dict, result: dict, **options) -> str:
+    rows = [calcpad.row(item["label"], item["expression"], calcpad.number(item["value"]), item["clause"])
+            for item in result["workings"]]
+    return calcpad.render(inputs, [calcpad.table("Calculation", rows)], data_id="$module_id-inputs", **options)

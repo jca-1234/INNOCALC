@@ -1,0 +1,23 @@
+{
+  "client": "Example client",
+  "project": "Reinforcement rate transcription check",
+  "projectno": "EX-006",
+  "designer": "",
+  "checker": "",
+  "date": "01/01/2026",
+  "subject": "Reinforcement rate",
+  "memberType": "Slab",
+  "memberNumber": "0001",
+  "package": "Unallocated",
+  "level": "",
+  "description": "Structural Toolkit REINFORCEMENT RATE V5.00 member geometry with a worked schedule added.",
+  "checks": {},
+  "title": "Typical 1 way slab panel",
+  "L": 1000.0,
+  "rb": 1000.0,
+  "rd": 150.0,
+  "cover": 30.0,
+  "ligs": 8.0,
+  "density": 7860.0,
+  "schedule": "# type, number or centres, bar size, length (mm), description\nB, 200, 12, 1000, Bottom bars main direction\nB, 400, 12, 1000, Top bars main direction\nB, 300, 10, 1000, Bottom bars secondary direction"
+}

@@ -1,0 +1,15 @@
+id = "concrete-plain"
+name = "Plain Concrete Design"
+short = "Plain Concrete"
+standard = "AS 3600:2018 Amdt 1 and 2"
+folder = "04 - CONCRETE PLAIN"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_plain.headless"
+defaultSubject = "Plain concrete design"
+calcType = "Plain concrete"
+description = "Section 20 plain concrete design: footing bending, one-way shear and two-way punching shear with the moment reduction, and unreinforced pedestal compressive and tensile stress limits. Transcribed from the retained Structural Toolkit PLAIN CONCRETE V5.02 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

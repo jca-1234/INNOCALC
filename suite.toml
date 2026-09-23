@@ -1,0 +1,90 @@
+schema_version = 1
+contract_version = 1
+categories = ["Load Calculations", "Timber", "Concrete", "Insitu Concrete", "Precast Concrete", "Temporary Works", "Steel", "Glass", "Fibres", "Composite", "Foundations", "Retaining wall", "Analysis", "General"]
+
+[[modules]]
+id = "steel-member"
+path = "calculations/steel/member"
+entry = "smd.headless"
+category = "Steel"
+filing_folder = "01 - STEEL MEMBER"
+enabled = true
+
+[[modules]]
+id = "concrete-column"
+path = "calculations/concrete/column"
+entry = "ccd.headless"
+category = "Insitu Concrete"
+filing_folder = "02 - CONCRETE COLUMN"
+enabled = true
+
+[[modules]]
+id = "calculation-pad"
+path = "calculations/general/calculation_pad/src"
+entry = "cpd.headless"
+category = "General"
+filing_folder = "90 - CALCULATION PAD"
+enabled = true
+[[modules]]
+id = "concrete-corbel"
+path = "calculations/concrete/concrete_corbel/src"
+entry = "ic_concrete_corbel.headless"
+category = "Concrete"
+filing_folder = "03 - CONCRETE CORBEL"
+enabled = false
+
+[[modules]]
+id = "concrete-plain"
+path = "calculations/concrete/concrete_plain/src"
+entry = "ic_concrete_plain.headless"
+category = "Concrete"
+filing_folder = "04 - CONCRETE PLAIN"
+enabled = false
+
+[[modules]]
+id = "concrete-parameters"
+path = "calculations/concrete/concrete_parameters/src"
+entry = "ic_concrete_parameters.headless"
+category = "Concrete"
+filing_folder = "05 - CONCRETE PARAMETERS"
+enabled = false
+
+[[modules]]
+id = "concrete-deep-beam"
+path = "calculations/concrete/concrete_deep_beam/src"
+entry = "ic_concrete_deep_beam.headless"
+category = "Concrete"
+filing_folder = "06 - CONCRETE DEEP BEAM"
+enabled = false
+
+[[modules]]
+id = "concrete-stair"
+path = "calculations/concrete/concrete_stair/src"
+entry = "ic_concrete_stair.headless"
+category = "Concrete"
+filing_folder = "07 - CONCRETE STAIR"
+enabled = false
+
+[[modules]]
+id = "concrete-reinforcement-rate"
+path = "calculations/concrete/concrete_reinforcement_rate/src"
+entry = "ic_concrete_reinforcement_rate.headless"
+category = "Concrete"
+filing_folder = "08 - REINFORCEMENT RATE"
+enabled = false
+
+[[modules]]
+id = "concrete-development"
+path = "calculations/concrete/concrete_development/src"
+entry = "ic_concrete_development.headless"
+category = "Concrete"
+filing_folder = "09 - REINFORCEMENT DEVELOPMENT"
+enabled = false
+
+[[modules]]
+id = "concrete-reinforcement-tables"
+path = "calculations/concrete/concrete_reinforcement_tables/src"
+entry = "ic_concrete_reinforcement_tables.headless"
+category = "Concrete"
+filing_folder = "10 - REINFORCEMENT TABLES"
+enabled = false

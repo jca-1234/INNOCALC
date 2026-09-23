@@ -1,0 +1,15 @@
+id = "concrete-stair"
+name = "Concrete Stair Design"
+short = "Concrete Stair"
+standard = "AS 3600:2018 Amdt 1 and 2"
+folder = "07 - CONCRETE STAIR"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_stair.headless"
+defaultSubject = "Concrete stair design"
+calcType = "Concrete stair"
+description = "Spanning reinforced concrete stair flight: self weight from the stepped profile, strength combinations, Section 9 bending capacity per metre width, minimum reinforcement, ductility, and the Cl 9.4.4 deemed-to-comply minimum thickness with the inclined deflection modifier. Transcribed from the retained Structural Toolkit CONCRETE STAIRS V5.06 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

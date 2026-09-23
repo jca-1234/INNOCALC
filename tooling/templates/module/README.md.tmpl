@@ -1,0 +1,21 @@
+# $name
+
+Status: planned. Not implemented or verified for design use.
+
+Standard: $standard
+
+Maintainer: $owner
+
+Complete the module requirements brief in the suite docs before implementation.
+Keep equations and intermediate values in the engine, presentation in report,
+and acceptance examples in tests. Add original references under reference/.
+
+From the suite root:
+
+```
+python -m tooling dev $module_id --schema
+python -m tooling check $module_id --validate
+```
+
+The release tests intentionally fail until engineering and reference validation
+are implemented. Do not enable this module in suite.toml before independent review.

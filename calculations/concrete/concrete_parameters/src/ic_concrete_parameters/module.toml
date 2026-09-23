@@ -1,0 +1,15 @@
+id = "concrete-parameters"
+name = "Concrete Design Parameters"
+short = "Concrete Parameters"
+standard = "AS 3600:2018 Amdt 1 and 2; AS 2327:2017"
+folder = "05 - CONCRETE PARAMETERS"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_parameters.headless"
+defaultSubject = "Concrete design parameters"
+calcType = "Concrete parameters"
+description = "Material and rectangular stress block parameters for a nominated concrete grade: alpha1, alpha2, gamma, f'ct.f, mean in-situ strength by three sources, modulus of elasticity, strength gain with age, and the deemed-to-comply minimum flexural reinforcement factors. A parameter calculation, not a member design check. Transcribed from the retained Structural Toolkit FORMULA V5.02 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

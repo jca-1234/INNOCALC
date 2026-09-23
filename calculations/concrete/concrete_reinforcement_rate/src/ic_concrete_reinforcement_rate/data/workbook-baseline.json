@@ -1,0 +1,100 @@
+{
+  "source": {
+    "workbook": "Concrete_Rate_500.xls",
+    "module": "Structural Toolkit REINFORCEMENT RATE V5.00",
+    "standard": "AS 3600:2018 (Incl. Amendment 1 and 2)",
+    "extract": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Rate_500.audit.json",
+    "review": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Rate_500.md",
+    "extractedOn": "2026-09-11",
+    "permittedUse": "Internal transcription evidence for the InnoCalc concrete-reinforcement-rate module.",
+    "caution": [
+      "The workbook is a quantity calculator. It has no pass or fail cell, no utilisation and",
+      "no design check, so there is nothing of that kind to reproduce.",
+      "The saved state has an EMPTY reinforcement schedule, so Rate!C17 (total weight) and",
+      "Rate!C18 (rate) both cache zero. The published evidence is therefore the member",
+      "geometry chain only: Rate!G11, G12, G14, G15, G16 and G17.",
+      "The schedule row arithmetic is asserted separately by cases whose inputs are chosen",
+      "here rather than taken from the workbook, and those cases are marked as derived."
+    ]
+  },
+  "tolerance": 1e-9,
+  "computeCases": [
+    {
+      "name": "REINFORCEMENT RATE V5.00 saved example - member geometry",
+      "sheetCells": "Rate!C10:C14, Rate!G11:G17, Rate!C17:C18",
+      "inputs": {
+        "title": "Default", "L": 1000, "rb": 1000, "rd": 150, "cover": 30,
+        "ligs": 8, "density": 7860, "schedule": ""
+      },
+      "expect": {
+        "member.area": 0.15,
+        "member.volume": 0.15,
+        "member.hook": 150.0,
+        "member.ties": 6.0,
+        "member.ligature": 2.32,
+        "member.tieSet": 2.46,
+        "totals.weight": 0.0,
+        "totals.rate": 0.0,
+        "totals.rows": 0.0
+      }
+    },
+    {
+      "name": "Derived: a bar row at centres across the width",
+      "derived": true,
+      "note": "Rate!F24, G24 and I24 applied to a chosen row; not a workbook cached value.",
+      "inputs": {
+        "title": "Bar row", "L": 1000, "rb": 1000, "rd": 150, "cover": 30,
+        "ligs": 8, "density": 7860,
+        "schedule": "B, 200, 12, 1000, Bottom bars"
+      },
+      "expect": {
+        "schedule.0.count": 5.0,
+        "schedule.0.totalLength": 5.0,
+        "schedule.0.weight": 4.44472528629,
+        "schedule.0.mark": "N12-200",
+        "totals.rate": 29.6315019086
+      },
+      "tolerances": {
+        "schedule.0.weight": 1e-08,
+        "totals.rate": 1e-08
+      }
+    },
+    {
+      "name": "Derived: a bar row entered as a count",
+      "derived": true,
+      "note": "Rate!F24 reads a number below 100 as a count.",
+      "inputs": {
+        "title": "Count row", "L": 1000, "rb": 1000, "rd": 150, "cover": 30,
+        "ligs": 8, "density": 7860,
+        "schedule": "B, 6, 12, 1000, Six bars"
+      },
+      "expect": {
+        "schedule.0.count": 6.0,
+        "schedule.0.totalLength": 6.0,
+        "schedule.0.mark": "6-N12"
+      }
+    },
+    {
+      "name": "Derived: a ligature row and a transverse ligature set",
+      "derived": true,
+      "note": "Rate!F24 and G24 for types L and T, using the member ligature lengths.",
+      "inputs": {
+        "title": "Ligature rows", "L": 1000, "rb": 1000, "rd": 150, "cover": 30,
+        "ligs": 8, "density": 7860,
+        "schedule": "L, 300, 10, 3000, Ligatures\nT, 300, 10, 3000, Transverse sets"
+      },
+      "expect": {
+        "schedule.0.count": 11.0,
+        "schedule.0.totalLength": 25.52,
+        "schedule.0.mark": "N10-300 L",
+        "schedule.1.count": 11.0,
+        "schedule.1.totalLength": 52.58,
+        "schedule.1.mark": "N10-300 L*"
+      },
+      "tolerances": {
+        "schedule.0.totalLength": 1e-08,
+        "schedule.1.totalLength": 1e-08
+      }
+    }
+  ]
+}

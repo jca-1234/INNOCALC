@@ -1,0 +1,15 @@
+id = "concrete-corbel"
+name = "Concrete Corbel Design"
+short = "Concrete Corbel"
+standard = "AS 3600:2018 Amdt 1 and 2"
+folder = "03 - CONCRETE CORBEL"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_corbel.headless"
+defaultSubject = "Concrete corbel design"
+calcType = "Concrete corbel"
+description = "Bearing, shear friction, compression strut and horizontal tensile tie checks for a reinforced concrete corbel on a wall or column, with AS/NZS 1170.0 strength combinations. Transcribed from the retained Structural Toolkit CORBEL V5.06 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

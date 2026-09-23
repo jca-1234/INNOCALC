@@ -1,0 +1,84 @@
+{
+  "source": {
+    "workbook": "Concrete_DeepBeam_502.xls",
+    "module": "Structural Toolkit DEEP BEAMS V5.02",
+    "standard": "AS 3600:2018 (Incl. Amendment 1 and 2); CEB approach after Warner, Rangan, Hall and Faulkes, Reinforced Concrete, Longman 1998",
+    "extract": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_DeepBeam_502.audit.json",
+    "review": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_DeepBeam_502.md",
+    "extractedOn": "2026-09-10",
+    "permittedUse": "Internal transcription evidence for the InnoCalc concrete-deep-beam module.",
+    "caution": [
+      "The workbook labels its own method 'Superceded CEB Approach - Informative only'",
+      "(Info!F19 and Design!B15). Agreement with it proves transcription only.",
+      "The saved example VIOLATES the support width limit: Design!D23 reads",
+      "'mm Error - c > L/5' because c = 900 mm exceeds L/5 = 600 mm. The workbook's own",
+      "summary ratio cell Settings!O21 = MAX(Vstar/fV) ignores that rule, so the workbook",
+      "reports OK (0.15) while a rule on the same sheet has failed. This module reports the",
+      "support width limit as a utilisation, so it governs at 1.50 and the design FAILS.",
+      "Design!C17 stores lowercase 'c'; Excel matches it case-insensitively against 'C'."
+    ]
+  },
+  "tolerance": 1e-9,
+  "computeCases": [
+    {
+      "name": "DEEP BEAMS V5.02 saved example - cantilever",
+      "sheetCells": "Design!C17:H33, Design!E38:E70, Settings!O18:O21",
+      "inputs": {
+        "spanType": "c", "L": 3000, "D": 4000, "bw": 300, "support": 900, "Df": 100,
+        "fc": 100, "fsy": 500, "bar": 16, "mesh": 10,
+        "crack": "W", "fsic": 351, "gs": 1.15, "gc": 1.5,
+        "Mstar": 2000, "Mstarn": 1000, "Vstar": 900, "Rstar": 1800,
+        "Pstar": 100, "wstar": 10, "reodiste": 1
+      },
+      "expect": {
+        "geometry.ldActual": 0.75,
+        "geometry.ldLimit": 1.0,
+        "geometry.supportLimit": 600.0,
+        "geometry.z": 2700.0,
+        "serviceability.fsi": 365.0,
+        "serviceability.fsyd": 365.0,
+        "material.fcd": 66.6666666667,
+        "reinforcement.AstPositive": 2029.42668696,
+        "reinforcement.AstNegative": 1014.71334348,
+        "reinforcement.barsPositive": 10.0935402773,
+        "reinforcement.barsNegative": 5.04677013863,
+        "distribution.fraction": 0.0,
+        "distribution.barsMiddlePositive": 10.0935402773,
+        "distribution.barsMiddleNegative": 5.04677013863,
+        "positiveRegion.bars": 10.0935402773,
+        "positiveRegion.depth": 800.0,
+        "distribution.middleDepth": 2400.0,
+        "shear.phiVuDepth": 8000000.0,
+        "shear.phiVuSpan": 6000000.0,
+        "shear.phiVu": 6000000.0,
+        "web.Asw": 78.5398163397,
+        "web.meshSpacing": 104.71975512,
+        "web.barSpacing": 130.8996939,
+        "support.phiRe": 16000000.0,
+        "support.phiRi": 26400000.0,
+        "loads.indicativeM": 345000000.0,
+        "loads.indicativeV": 130000.0,
+        "util.diagonalCompression": 0.15,
+        "util.supportWidthLimit": 1.5
+      },
+      "tolerances": {
+        "material.fcd": 1e-08,
+        "reinforcement.AstPositive": 1e-08,
+        "reinforcement.AstNegative": 1e-08,
+        "reinforcement.barsPositive": 1e-08,
+        "reinforcement.barsNegative": 1e-08,
+        "distribution.barsMiddlePositive": 1e-08,
+        "distribution.barsMiddleNegative": 1e-08,
+        "positiveRegion.bars": 1e-08,
+        "web.Asw": 1e-08,
+        "web.meshSpacing": 1e-08,
+        "web.barSpacing": 1e-08,
+        "shear.phiVuDepth": 1e-08,
+        "shear.phiVuSpan": 1e-08,
+        "shear.phiVu": 1e-08,
+        "support.phiRe": 1e-08,
+        "support.phiRi": 1e-08
+      }
+    }
+  ]
+}

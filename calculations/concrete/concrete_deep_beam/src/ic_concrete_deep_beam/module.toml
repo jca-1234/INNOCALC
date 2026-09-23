@@ -1,0 +1,15 @@
+id = "concrete-deep-beam"
+name = "Concrete Deep Beam Design"
+short = "Concrete Deep Beam"
+standard = "AS 3600:2018 Amdt 1 and 2; superseded CEB approach after Warner, Rangan, Hall and Faulkes"
+folder = "06 - CONCRETE DEEP BEAM"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_deep_beam.headless"
+defaultSubject = "Concrete deep beam design"
+calcType = "Concrete deep beam"
+description = "Deep beam tension tie reinforcement, diagonal compression, web reinforcement and support zone bearing by the superseded CEB approach. INFORMATIVE ONLY - the source workbook states the method is superseded. Transcribed from the retained Structural Toolkit DEEP BEAMS V5.02 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

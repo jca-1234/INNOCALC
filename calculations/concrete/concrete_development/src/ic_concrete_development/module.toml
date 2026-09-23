@@ -1,0 +1,15 @@
+id = "concrete-development"
+name = "Reinforcement Development and Laps"
+short = "Development and Laps"
+standard = "AS 3600:2018 Amdt 1 and 2, Section 13"
+folder = "09 - REINFORCEMENT DEVELOPMENT"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_development.headless"
+defaultSubject = "Reinforcement development and laps"
+calcType = "Development and laps"
+description = "Section 13 development and lapped splice lengths for deformed and plain bars in tension and compression, with the k1 to k3 and mb, me, ml factors, the Cl 13.2.4 fitment reductions, a table over the standard bar sizes, and optional hook and cog geometry. A length calculation, not a member design check. Transcribed from the retained Structural Toolkit REINFORCEMENT DEVELOPMENT V5.06 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

@@ -1,0 +1,20 @@
+{
+  "client": "Example client",
+  "project": "Reinforcement table transcription check",
+  "projectno": "EX-008",
+  "designer": "",
+  "checker": "",
+  "date": "01/01/2026",
+  "subject": "Reinforcement tables",
+  "memberType": "Reinforcement",
+  "memberNumber": "0001",
+  "package": "Unallocated",
+  "level": "",
+  "description": "Reinforcement reference tables with N16 selected at 4 bars and 200 mm centres.",
+  "checks": {},
+  "db": 16.0,
+  "count": 4.0,
+  "centres": 200.0,
+  "rounding": "-1",
+  "mesh": "RL1218"
+}

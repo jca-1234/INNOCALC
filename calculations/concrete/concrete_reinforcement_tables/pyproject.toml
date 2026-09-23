@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "innocalc-concrete-reinforcement-tables"
+version = "0.1.0.dev0"
+requires-python = ">=3.11"
+dependencies = ["innocalc-suite>=0.1.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"ic_concrete_reinforcement_tables" = ["module.toml", "data/*.json"]

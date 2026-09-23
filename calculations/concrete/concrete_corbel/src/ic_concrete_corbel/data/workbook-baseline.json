@@ -1,0 +1,105 @@
+{
+  "source": {
+    "workbook": "Concrete_Corbel_506.xls",
+    "module": "Structural Toolkit CORBEL V5.06",
+    "standard": "AS 3600:2018 (Incl. Amendment 1 and 2)",
+    "sourceSha256": "2e85b8d74f54329ff7ed285ec912f933e467265a2922da4572aaf9778150fde6",
+    "decodedXlsSha256": "b2c361b5d4c4d9c9cfe03bfecaf5650b2bb3e3b26699675809c5abf299242d3f",
+    "extract": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Corbel_506.audit.json",
+    "review": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Corbel_506.md",
+    "extractedOn": "2026-09-10",
+    "permittedUse": "Internal transcription evidence for the InnoCalc concrete-corbel module.",
+    "caution": [
+      "The workbook was saved in an unconverged state. Design!L17 (error) holds -7.90333089991 kN, so",
+      "the stored strut width dc = 18.7954083212 mm is NOT the GoalSeek solution for the stored inputs.",
+      "Case 1 therefore excludes every quantity that depends on dc.",
+      "Case 2 pins dc at the stored value and checks the strut and tie formula chain only, which is",
+      "internally consistent with that dc and reproduces Design!L17 as the residual."
+    ]
+  },
+  "tolerance": 1e-9,
+  "computeCases": [
+    {
+      "name": "CORBEL V5.06 saved example - dc-independent quantities",
+      "sheetCells": "Design!D15:H47, Design!E52:E66, Design!E79, Design!E87, Settings!O19",
+      "inputs": {
+        "fc": 32, "b": 600, "df": 150, "D": 300, "av": 105, "bw": 30, "th": 150,
+        "scond": "R", "loadtype": "N", "mlt": 1,
+        "Vdl": 60, "Vll": 60, "Ndl": 6, "Nll": 6,
+        "bar": "12", "fsy": "500", "cover": 40, "reoMode": "count", "reoValue": 6
+      },
+      "expect": {
+        "geometry.bl": 600.0,
+        "geometry.Ab": 18000.0,
+        "geometry.Dmin": 178.5,
+        "geometry.lever": 254.0,
+        "interface.mu": 0.7,
+        "interface.kco": 0.4,
+        "material.fctf": 3.3941125497,
+        "material.fct": 2.03646752982,
+        "loads.psiL": 0.4,
+        "loads.Vstar": 162000.0,
+        "loads.Nstar": 16200.0,
+        "loads.Ndstar": 32400.0,
+        "loads.gpt": -16800.0,
+        "loads.gp": -28.0,
+        "reinforcement.Abar": 113.097335529,
+        "reinforcement.nbars": 6.0,
+        "reinforcement.cts": 101.6,
+        "reinforcement.As": 678.584013175,
+        "reinforcement.Asmin": 288.633193202,
+        "bearing.Bstar": 9.0,
+        "bearing.phiBmax": 37.44,
+        "bearing.phiBa": 14.976,
+        "bearing.phiB": 14.976,
+        "shearFriction.Asf": 226.194671058,
+        "shearFriction.bf": 300.0,
+        "shearFriction.s": 101.6,
+        "shearFriction.tauCalc": 3.34663343156,
+        "shearFriction.tauMax": 6.4,
+        "shearFriction.tau": 3.34663343156,
+        "shearFriction.phiVu": 421675.812377,
+        "strut.H": 274.847230293,
+        "strut.ang1": 0.391992358466,
+        "tie.phiFt": 288398.2056,
+        "util.bearing": 0.600961538462
+      },
+      "tolerances": {
+        "shearFriction.phiVu": 1e-08,
+        "tie.phiFt": 1e-08
+      }
+    }
+  ],
+  "strutCases": [
+    {
+      "name": "CORBEL V5.06 strut and tie chain at the stored dc",
+      "sheetCells": "Design!E69:E87, Design!L17",
+      "inputs": {
+        "dc": 18.7954083212, "lever": 254.0, "av": 105.0, "b": 600.0, "fc": 32.0,
+        "Vstar": 162000.0, "Ndstar": 32400.0
+      },
+      "expect": {
+        "H": 274.847230293,
+        "ang1": 0.391992358466,
+        "ang2": 0.0341991305346,
+        "theta": 1.14460483779,
+        "betas": 0.880244319346,
+        "x": 45.4647711087,
+        "sigmaMax": 16.4781736582,
+        "phiCa": 185828.401375,
+        "w": 17.114099103,
+        "lg": 274.686517974,
+        "dl": 250.114932888,
+        "Cf": 177915.070475,
+        "residual": -7903.33089991,
+        "Ftstar": 105951.154323
+      },
+      "tolerances": {
+        "phiCa": 1e-08,
+        "Cf": 1e-08,
+        "Ftstar": 1e-08,
+        "residual": 1e-07
+      }
+    }
+  ]
+}

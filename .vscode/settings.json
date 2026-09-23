@@ -1,0 +1,9 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/apps/manager",
+    "${workspaceFolder}/calculations/steel/member",
+    "${workspaceFolder}/calculations/concrete/column",
+    "${workspaceFolder}/calculations/general/calculation_pad/src"
+  ]
+}

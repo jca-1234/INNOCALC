@@ -1,0 +1,90 @@
+{
+  "source": {
+    "workbook": "Concrete_Stair_506.xls",
+    "module": "Structural Toolkit CONCRETE STAIRS V5.06",
+    "standard": "AS 3600:2018 (Incl. Amendment 1 and 2)",
+    "sourceSha256": "a4595c0259739f751cc6efbb2cce54bce57dbd03f528867ad8442f9988b8a262",
+    "extract": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Stair_506.audit.json",
+    "review": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Stair_506.md",
+    "extractedOn": "2026-09-11",
+    "permittedUse": "Internal transcription evidence for the InnoCalc concrete-stair module.",
+    "caution": [
+      "The saved example is a FAILED design. Settings!O29 (Ratio) caches 1.11108960735 and",
+      "Design!I9 reads 'No Good (1.11)': bending governs, M* = 45.3 kNm/m against",
+      "phiMuo = 40.8 kNm/m.",
+      "Design!E52 also displays 'Warning - Compression steel in tension, Asc ignored for kcs',",
+      "so the saved state exercises that branch: Asc = 100 mm2/m at dc = 40 mm sits inside the",
+      "cracked tension zone, kcs becomes 2.0 rather than the unfiltered Settings!O24 value of",
+      "1.84721125463.",
+      "The Design sheet inputs differ from the Settings reset block; the Design values are the",
+      "ones cached and are the ones used here."
+    ]
+  },
+  "tolerance": 1e-9,
+  "computeCases": [
+    {
+      "name": "CONCRETE STAIRS V5.06 saved example",
+      "sheetCells": "Design!D14:D69, Design!H14:I69, Settings!O20:O29",
+      "inputs": {
+        "fc": 100, "L": 5000, "W": 2556, "th": 150, "cover": 20, "spanType": "I",
+        "riser": 190, "going": 250, "conc": 25, "density": 2400,
+        "wsdl": 0, "wll": 4, "loadtype": "Floor",
+        "bar": 10, "fsy": 500, "ductilityClass": "N",
+        "reoMode": "centres", "reoValue": 100,
+        "Asc": 100, "dc": 40, "usefcmi": "N",
+        "useVertM": "N", "useVertD": "Y", "deflectionBasis": "L", "k3": 1,
+        "spanOverDeflection": 250, "spanOverDeflectionIncremental": 500
+      },
+      "expect": {
+        "geometry.ang": 314.006369362,
+        "geometry.f": 1.25602547745,
+        "geometry.incline": 37.2348339816,
+        "geometry.ath": 225.635408442,
+        "geometry.ds": 125.0,
+        "geometry.eds": 125.0,
+        "geometry.D": 150.0,
+        "loads.wdl": 7.08509554043,
+        "loads.wstar": 14.5021146485,
+        "loads.Mstar": 45319108.2766,
+        "reinforcement.nbars": 10.0,
+        "reinforcement.cts": 100.0,
+        "reinforcement.Ast": 785.398163397,
+        "reinforcement.Astmin": 432.0,
+        "bending.alpha2": 0.7,
+        "bending.gamma": 0.72,
+        "bending.kuo": 0.0623331875712,
+        "bending.phi": 0.85,
+        "bending.phiMuo": 40787986.8344,
+        "material.fcmi": 100.0,
+        "material.Ec": 42327.1827553,
+        "material.n": 4.72509595444,
+        "deflection.p": 0.00628318530718,
+        "deflection.pc": 0.0008,
+        "deflection.dcOverDs": 0.32,
+        "deflection.ku": 0.217034697883,
+        "deflection.NA": 27.1293372354,
+        "deflection.kcs": 2.0,
+        "deflection.fdef": 27.2552866213,
+        "deflection.fdefIncremental": 20.1701910809,
+        "deflection.inclineModifier": 1.12072542465,
+        "deflection.k4": 2.1,
+        "deflection.dmin": 145.157807633,
+        "deflection.dminIncremental": 165.425892025,
+        "deflection.thmin": 170.157807633,
+        "deflection.thminIncremental": 190.425892025,
+        "deflection.compressionInTension": true,
+        "util.bending": 1.11108960735
+      },
+      "tolerances": {
+        "loads.Mstar": 1e-08,
+        "bending.phiMuo": 1e-08,
+        "material.Ec": 1e-08,
+        "deflection.dmin": 1e-08,
+        "deflection.dminIncremental": 1e-08,
+        "deflection.thmin": 1e-08,
+        "deflection.thminIncremental": 1e-08,
+        "util.bending": 1e-08
+      }
+    }
+  ]
+}

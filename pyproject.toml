@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "innocalc-suite"
+version = "0.1.0"
+description = "InnoCalc shared reporting and calculation development tools"
+requires-python = ">=3.11"
+dependencies = ["pypdf==6.16.2", "Pint==0.25.3", "sympy==1.14.0"]
+
+[project.scripts]
+innocalc = "tooling.__main__:main"
+
+[tool.setuptools]
+packages = ["calcpad", "packages", "packages.innocalc_sdk", "tooling"]
+
+[tool.setuptools.package-dir]
+calcpad = "packages/calcpad"
+
+[tool.setuptools.package-data]
+calcpad = ["theme.css", "assets/*"]
+tooling = ["templates/**/*.tmpl"]

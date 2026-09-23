@@ -26,7 +26,7 @@ The service binds to localhost only and uses the Python standard library plus th
 
 The front end holds no engineering knowledge whatsoever. It asks each module for a schema and
 builds the input form from it, then displays the HTML the module returns. Adding a design
-module therefore requires **one line** in `icm/registry.py` and no front-end work at all.
+module therefore requires **one manifest entry** in `../suite.toml` and no front-end work at all.
 
 ```
 InnoCalcManager           head application: projects, library, packages, QA
@@ -34,13 +34,14 @@ InnoCalcManager           head application: projects, library, packages, QA
 calcpad/                  shared presentation, notation, PDF export, trace
 SteelMemberDesign/smd     headless calculation module
 ConcreteColumnDesign/ccd  headless calculation module
-CalculationPad/cpd        headless calculation module
+CalculationPad/src/cpd    headless calculation module (src-layout pilot)
 ```
 
 The contract is specified in [`docs/MODULE-SPECIFICATION.md`](../docs/MODULE-SPECIFICATION.md).
 To commission a new module, fill in [`docs/NEW-MODULE-BRIEF.md`](../docs/NEW-MODULE-BRIEF.md) and
 hand it to an AI assistant working in this repository. The only manager-side change is one
-entry in `icm/registry.py` naming the module's folder, entry point and discipline branch.
+entry in `suite.toml` naming the source path, entry point, permanent filing name and
+discipline. Use `python -m tooling new` from the suite root; see `../docs/DEVELOPMENT.md`.
 
 ---
 
@@ -85,7 +86,7 @@ entry in `icm/registry.py` naming the module's folder, entry point and disciplin
 navigation tree: Favourites, Load Calculations, Timber, Insitu Concrete, Precast Concrete,
 Temporary Works, Steel, Glass, Fibres, Composite, Foundations, Retaining wall, Analysis and
 General, with a search across module names, standards and descriptions. Star a module to keep
-it in Favourites. A module declares its branch with one word in `icm/registry.py`.
+it in Favourites. A module declares its branch in `suite.toml`.
 
 ### Saving
 Saving writes the calculation and its index entry, then returns. The sheet is printed to PDF by
@@ -203,6 +204,11 @@ All JSON, localhost only, `token` carried in the body or query string.
 ---
 
 ## Requirements
+
+Run `../setup.bat` explicitly to prepare the suite-owned virtual environment and
+pinned dependencies. The launcher no longer borrows Steel's environment or installs
+packages during startup. New revisions retain snapshots; package export uses the
+saved sheet and attachments instead of recomputing with the current engine.
 
 * Windows, Python 3.11 or later.
 * Microsoft Edge or Google Chrome, for PDF export.

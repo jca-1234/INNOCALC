@@ -1,11 +1,11 @@
 # InnoCalc Module Specification
 
-**Version 1.0 — 1 September 2026**
+**Version 1.1 — 10 September 2026**
 
 This document defines the contract a calculation module must satisfy to be hosted by
 **InnoCalc Manager**. A module that follows it can be developed, calculated, validated and
 released entirely on its own, and then dropped into the manager **without any change to the
-manager's front end or back end** beyond one registry entry.
+manager's front end or back end** beyond one entry in `suite.toml`.
 
 ---
 
@@ -26,41 +26,40 @@ manager's front end or back end** beyond one registry entry.
 
 ```
 INNOCALC/
-  calcpad/                    shared presentation, notation, PDF export, trace
-  InnoCalcManager/            the head application
-  SteelMemberDesign/          module folder
-    smd/
-      headless.py             <- the contract lives here
-      engine.py, report.py, ... module internals
-    styles.css                optional module-specific sheet styling
-  YourNewModule/
-    ynm/
-      headless.py
+  suite.toml                      enabled modules and source locations
+  packages/calcpad/               shared presentation (import calcpad)
+  packages/innocalc_sdk/           shared contract checks and dev runner
+  calculations/<discipline>/<id>/
+    pyproject.toml
+    src/<package>/
+      module.toml                 module metadata
+      headless.py                 the public contract
+      engine.py, report.py, ...
+    tests/
+    examples/
+    reference/
 ```
 
-Register it by adding one entry to `InnoCalcManager/icm/registry.py`:
+Use `python -m tooling new` as described in `docs/DEVELOPMENT.md`. It creates this
+structure and a disabled manifest entry. Registration is data, not manager code:
 
-```python
-SOURCES = [
-    ...,
-    {"folder": "YourNewModule", "entry": "ynm.headless"},
-]
+```toml
+[[modules]]
+id = "your-module"
+path = "calculations/general/your_module/src"
+entry = "ic_your_module.headless"
+category = "General"
+filing_folder = "YOUR MODULE"
+enabled = false
 ```
 
-The module folder is added to `sys.path`, then `ynm.headless` is imported. If the import
-fails, the manager reports the problem and keeps running without that module.
-
-Your package `__init__.py` must put the suite root on `sys.path` so `calcpad` resolves both
-standalone and when hosted:
-
-```python
-import sys
-from pathlib import Path
-
-_SUITE_ROOT = str(Path(__file__).resolve().parents[2])
-if _SUITE_ROOT not in sys.path:
-    sys.path.insert(0, _SUITE_ROOT)
-```
+The manager adds the declared source path and imports the entry point. Duplicate
+IDs, paths, entry points and filing names are rejected. Enable only after contract,
+engineering and reference checks pass and the module declares `status = "available"`.
+Install the suite and module packages for standalone development; new modules must
+not depend on fixed directory-depth `sys.path` bootstraps. Existing module paths
+remain supported during migration. Source paths may move; saved IDs and filing
+names must not change.
 
 ---
 
@@ -149,6 +148,15 @@ Everything else in the input document belongs to the module and may be named fre
 | `attachments` | `list[dict]` *(optional)* | PDF pages to splice into an exported package: `{"path", "pages", "title", "exists"}`. |
 
 Values that cannot be attained must be reported as `math.inf` in `util`, not as an exception.
+
+Any unattainable or invalid utilisation must produce a failing summary even when
+`worstUtil` contains only the maximum finite value. Invalid supplied numbers must
+raise `ValueError`; do not turn nonnumeric values, NaN or infinity into zero loads.
+
+The manager snapshots every new revision's inputs, results, descriptor, summary,
+HTML and PDF attachments. Export uses that snapshot without calling `compute`.
+Old revisions without a snapshot require their saved PDF or an explicit reviewed
+re-save. See `docs/IMPLEMENTATION-STATUS.md` for the compatibility policy.
 
 ---
 
@@ -253,6 +261,28 @@ straight through to `calcpad.render`.
 
 Page packing is automatic: `calcpad` never splits a block across a page break, and honours an
 `<!--weight:n-->` comment when a block's depth cannot be inferred from its row count.
+
+### 7.1 Editing in the sheet (optional)
+
+A module may accept a keyword argument `interactive` on `render`. The manager passes
+`interactive=True` for the sheet it shows on screen and never for a printed or exported one,
+so the printed calculation is always the plain sheet. A module that does not declare the
+argument is called exactly as before.
+
+Use it to put form controls into the sheet where the values print, rather than only in the
+input panel. The calculation pad renders each calculation cell as a text area followed by its
+result. The front end binds anything it finds in the report pane carrying these attributes:
+
+| Attribute | Meaning |
+|-----------|---------|
+| `data-pad-cell="id"` | The block that holds one editable cell. |
+| `data-pad-source="id"` | A text area holding that cell's source. |
+| `data-pad-title="id"` | An input holding that cell's title. |
+| `data-pad-add="id"` | Add a cell after `id`; empty adds at the end. |
+| `data-pad-delete="id"` | Delete that cell. |
+
+The caret is captured before each recalculation and restored afterwards, so typing is not
+interrupted by the sheet redrawing.
 
 ---
 
@@ -372,7 +402,7 @@ module a range of example calculations.
 
 ## 12. Checklist for a new module
 
-- [ ] `ynm/__init__.py` puts the suite root on `sys.path`.
+- [ ] The suite and module install as Python packages; standalone imports do not depend on directory depth.
 - [ ] `ynm/headless.py` implements the seven required functions.
 - [ ] `descriptor()["id"]` and `["folder"]` are final.
 - [ ] Every `schema()` field id exists in `defaults()`.
@@ -382,8 +412,8 @@ module a range of example calculations.
 - [ ] `validate()` self-consistency passes across the module's input range.
 - [ ] `ynm/dev.py` runs the calculation, the trace and the validation with no manager.
 - [ ] `exchange()` / `apply_exchange()` implemented if the module produces or consumes actions.
-- [ ] One line added to `InnoCalcManager/icm/registry.py`.
-- [ ] `python server.py` in `InnoCalcManager` reports the module with no problems.
+- [ ] One validated entry in `suite.toml`; no manager source-code change.
+- [ ] `python server.py` in `apps/manager` reports the module with no problems.
 
 ---
 
@@ -391,6 +421,6 @@ module a range of example calculations.
 
 | Module | Shows |
 |--------|-------|
-| `SteelMemberDesign/smd/headless.py` | Catalogue-backed fields, optional check groups, module actions, exchange producer. |
-| `ConcreteColumnDesign/ccd/headless.py` | Conditional fields, always-on checks, a three-level validation tool (`ccd/validation.py`). |
-| `CalculationPad/cpd/headless.py` | A custom `cells` editor, PDF and blank-sheet attachments, notebook export, safe expression evaluation. |
+| `calculations/steel/member/smd/headless.py` | Catalogue-backed fields, optional check groups, module actions, exchange producer. |
+| `calculations/concrete/column/ccd/headless.py` | Conditional fields, always-on checks, a three-level validation tool (`ccd/validation.py`). |
+| `calculations/general/calculation_pad/src/cpd/headless.py` | A custom `cells` editor, PDF and blank-sheet attachments, notebook export, safe expression evaluation. |

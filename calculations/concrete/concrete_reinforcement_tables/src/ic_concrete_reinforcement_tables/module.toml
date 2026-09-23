@@ -1,0 +1,15 @@
+id = "concrete-reinforcement-tables"
+name = "Reinforcement Tables"
+short = "Reinforcement Tables"
+standard = "Reference tables; no design standard applied"
+folder = "10 - REINFORCEMENT TABLES"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_reinforcement_tables.headless"
+defaultSubject = "Reinforcement tables"
+calcType = "Reinforcement tables"
+description = "Reference areas of reinforcement: bar area by number of bars and by bar centres, and the standard fabric mesh properties. A lookup table, not a design check. Transcribed from the retained Structural Toolkit REINFORCEMENT V5.00 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

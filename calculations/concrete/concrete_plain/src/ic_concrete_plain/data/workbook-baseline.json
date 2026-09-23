@@ -1,0 +1,77 @@
+{
+  "source": {
+    "workbook": "Concrete_Plain_502.xls",
+    "module": "Structural Toolkit PLAIN CONCRETE V5.02",
+    "standard": "AS 3600:2018 (Incl. Amendment 1 and 2)",
+    "extract": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Plain_502.audit.json",
+    "review": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Plain_502.md",
+    "extractedOn": "2026-09-10",
+    "permittedUse": "Internal transcription evidence for the InnoCalc concrete-plain module.",
+    "caution": [
+      "The saved example is a FAILED design: Design!G88 reads 'No Good (1.04)' because the total",
+      "pedestal tensile stress of -3.0625 MPa exceeds the 2.9577 MPa limit. That is the correct",
+      "expected outcome, not a transcription defect.",
+      "Design!E48 (Dir) stores lowercase 'w'. Excel compares text case-insensitively, so the",
+      "workbook resolves a = aW. The module folds case for the same reason.",
+      "Design!E55 (P*) stores -250 kN, i.e. a tensile reaction, despite the sheet labelling P*",
+      "as positive in compression."
+    ]
+  },
+  "tolerance": 1e-9,
+  "computeCases": [
+    {
+      "name": "PLAIN CONCRETE V5.02 saved example",
+      "sheetCells": "Design!E11:E91",
+      "inputs": {
+        "fc": 120, "Dt": 250, "B": 1000,
+        "L": 90, "W": 90, "uMode": "calculated", "um": 0,
+        "Mstar": 2, "Vstar": 7, "Dir": "W",
+        "Lpx": 800, "Wpy": 500, "Pstar": -250,
+        "Mxstar": -50, "Mystar": -50, "eccx": 0, "eccy": 0, "ignoreEcc": "Y"
+      },
+      "expect": {
+        "geometry.D": 200.0,
+        "material.fcf": 6.57267069006,
+        "footing.phiMuo": 26290682.7602,
+        "footing.critical": 100.0,
+        "footing.phiVu1": 88783.6346759,
+        "punching.aL": 290.0,
+        "punching.aW": 290.0,
+        "punching.uc": 1160.0,
+        "punching.u": 1160.0,
+        "punching.bh": 1.0,
+        "punching.a": 290.0,
+        "punching.phiVumax": 304971.920019,
+        "punching.phiVuu": 457457.880028,
+        "punching.phiVu": 304971.920019,
+        "punching.phiVum": 177900.286678,
+        "pedestal.Ag": 400000.0,
+        "pedestal.maxHeight": 1500.0,
+        "pedestal.ax": 0.0,
+        "pedestal.ay": 0.0,
+        "pedestal.dax": 0.0,
+        "pedestal.day": 0.0,
+        "pedestal.sigmaA": -0.625,
+        "pedestal.Mxecc": 0.0,
+        "pedestal.Myecc": 0.0,
+        "pedestal.sigmaBx": 0.9375,
+        "pedestal.sigmaBy": 1.5,
+        "pedestal.sigmaTc": 1.8125,
+        "pedestal.sigmaTt": -3.0625,
+        "pedestal.sigmaCmax": 28.8,
+        "pedestal.sigmaTmax": 2.95770181053,
+        "pedestal.phiNuoC": 11520000.0,
+        "pedestal.phiNuoT": 1183080.72421
+      },
+      "tolerances": {
+        "footing.phiMuo": 1e-08,
+        "footing.phiVu1": 1e-08,
+        "punching.phiVumax": 1e-08,
+        "punching.phiVuu": 1e-08,
+        "punching.phiVu": 1e-08,
+        "punching.phiVum": 1e-08,
+        "pedestal.phiNuoT": 1e-08
+      }
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+/* Innovis calculation pad - shared print template for every calculation module. */
+@page{size:A4 portrait;margin:0}
+*{box-sizing:border-box}
+html,body{margin:0;background:#dfe2e5;color:#222;font-family:"Aptos","Calibri","Segoe UI",sans-serif}
+.report-document{padding:8mm 0}
+.calc-page{position:relative;width:210mm;height:297mm;margin:0 auto 8mm;background-color:#fff;background-image:linear-gradient(rgba(40,45,48,.075) .18mm,transparent .18mm),linear-gradient(90deg,rgba(40,45,48,.075) .18mm,transparent .18mm);background-size:5mm 5mm;padding:8mm 4mm 5mm;overflow:hidden;box-shadow:0 2px 10px #666}
+.brand{height:22mm;display:flex;justify-content:flex-end;align-items:center;font:700 10mm/1 "Bahnschrift",Arial,sans-serif;background:#fff;padding-right:3mm}
+.brand img{display:block;width:61mm;height:auto;max-height:18mm;object-fit:contain}
+.identity{width:100%;height:25mm;border-collapse:collapse;background:#fff;font-size:10pt;margin-bottom:5mm}
+.identity td{border:.25mm solid #333;padding:1.3mm 2mm;width:auto!important}
+.identity col.identity-main{width:70%}
+.identity col.identity-mid{width:14%}
+.identity col.identity-end{width:16%}
+.sheet-body{position:relative;height:229mm;padding:4mm;background-color:#fff;background-image:linear-gradient(rgba(40,45,48,.14) .18mm,transparent .18mm),linear-gradient(90deg,rgba(40,45,48,.14) .18mm,transparent .18mm);background-size:5mm 5mm;border:.35mm solid #333;overflow:hidden}
+.sheet-body::after{content:"";position:absolute;top:0;bottom:0;right:36mm;border-left:.45mm solid rgba(35,35,35,.55);pointer-events:none}
+.contents-link{position:absolute;right:5mm;bottom:1.5mm;font-size:7.5pt;color:#176b58;text-decoration:none}
+h2{font-size:11pt;margin:0 0 1.2mm;border-bottom:.4mm solid #222;padding-bottom:.6mm}
+table.calc{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:3mm;table-layout:fixed}
+table.calc col.item-col{width:24%}
+table.calc col.basis-col{width:auto}
+table.calc col.result-col{width:20%}
+table.calc col.reference-col{width:32mm}
+table.calc th{background:#e8eaec;border:.25mm solid #555;text-align:left;padding:.8mm 1.1mm}
+table.calc th:nth-child(3){text-align:right}
+table.calc td{border-bottom:.18mm solid #aaa;padding:.65mm 1.1mm;vertical-align:top;line-height:1.15;overflow-wrap:anywhere}
+table.calc td:nth-child(3){text-align:right}
+table.calc.dct{table-layout:auto;font-size:7.5pt}
+table.calc.dct th,table.calc.dct td{width:auto!important;text-align:right;padding:.6mm 1mm}
+table.calc.dct th:first-child,table.calc.dct td:first-child{text-align:left}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.status{display:inline-block;color:#fff;font-weight:700;padding:.5mm 2mm;border-radius:1mm;white-space:nowrap}
+.status.ok{background:#176b3a}
+.status.fail{background:#a51f26}
+code{font:7.5pt Consolas,monospace}
+.matrix{font-size:7.5pt!important}
+.dct-caption{font-size:8pt;margin:0 0 2mm;color:#333}
+.dct-notes{font-size:7.5pt;margin:2mm 0 0;padding-left:5mm;color:#333}
+.dct-hit{background:#ffe08a;font-weight:700;box-shadow:inset 0 0 0 .35mm #8a5a00}
+.prose{font-size:9pt;line-height:1.35;margin-bottom:3mm}
+.prose p{margin:0 0 1.6mm}
+.prose ul,.prose ol{margin:0 0 1.6mm;padding-left:6mm}
+.prose h3{font-size:9.5pt;margin:0 0 1mm}
+.pad-source{font:8pt/1.3 Consolas,monospace;background:#f3f4f2;border-left:.6mm solid #176b58;padding:1.2mm 2mm;margin:0 0 1.6mm;white-space:pre-wrap}
+.pad-math{font-size:9.5pt;margin:0 0 1.6mm;line-height:1.6}
+.pad-math .step{color:#555}
+.pad-math math{font-size:1.05em;vertical-align:middle}
+/* MathML shrinks fraction contents by default; a calculation sheet reads better level. */
+.pad-math math,.pad-math math *{math-style:normal;math-depth:0}
+.pad-blank{height:180mm}
+.pad-embed{width:100%;height:190mm;border:.3mm solid #999}
+/* Contents sheet */
+.toc-table{width:100%;border-collapse:collapse;font-size:8.5pt}
+.toc-table th{background:#e8eaec;border:.25mm solid #555;text-align:left;padding:1mm 1.4mm}
+.toc-table td{border-bottom:.18mm solid #aaa;padding:.8mm 1.4mm;vertical-align:top}
+.toc-table a{color:#176b58;text-decoration:none}
+.toc-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+/* Verification form */
+.vform{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:3mm}
+.vform th,.vform td{border:.25mm solid #444;padding:1.2mm 1.6mm;vertical-align:top}
+.vform th{background:#e8eaec;text-align:left}
+.vform .label{width:26%;font-weight:650;background:#f3f4f2}
+.vform .tick{width:6mm;text-align:center}
+.register td,.register th{font-size:8pt}
+.register .status-open{color:#a51f26;font-weight:700}
+.register .status-closed{color:#176b3a;font-weight:700}
+.register .status-deferred{color:#8a5a00;font-weight:700}
+@media print{
+  html,body{background:#fff}
+  .report-document{padding:0}
+  .calc-page{margin:0;box-shadow:none;break-after:page}
+  .calc-page:last-child{break-after:auto}
+}

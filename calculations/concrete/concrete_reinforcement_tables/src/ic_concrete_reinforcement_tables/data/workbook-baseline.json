@@ -1,0 +1,90 @@
+{
+  "source": {
+    "workbook": "Concrete_Reinforcement_500.xls",
+    "module": "Structural Toolkit REINFORCEMENT V5.00",
+    "standard": "No design standard declared; fabric from the OneSteel 'onemesh 500' publication",
+    "extract": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Reinforcement_500.audit.json",
+    "review": "C:/CODING/STK/Temp/Workbook_Reviews/Concrete/Concrete_Reinforcement_500.md",
+    "extractedOn": "2026-09-11",
+    "permittedUse": "Internal transcription evidence for the InnoCalc concrete-reinforcement-tables module.",
+    "caution": [
+      "The workbook is a reference lookup. It has no user input, no design check, no error or",
+      "warning cell and no utilisation, so there is nothing of that kind to reproduce.",
+      "The Centres sheet column B spacing list was not fully captured in the review export.",
+      "Only the first (60 mm) and last (1000 mm) rows have published values, and this module",
+      "uses its own spacing list between them.",
+      "The Number sheet's seventh column repeats 32 mm as a user selectable column; the",
+      "Centres sheet's seventh column is 40 mm. This module tabulates 12 to 40 mm on both,",
+      "which is a superset of the source.",
+      "The prestressing Tendons sheet captured column headings only, so it is not transcribed."
+    ]
+  },
+  "tolerance": 1e-9,
+  "computeCases": [
+    {
+      "name": "REINFORCEMENT V5.00 bar area tables",
+      "sheetCells": "Number!C7:H7, Number!C36:H36, Centres!C7, D7, I7, Centres!C37, D37, I37",
+      "inputs": {"db": 16, "count": 4, "centres": 200, "rounding": "-1", "mesh": "SL82"},
+      "expect": {
+        "numberTable.0.areas.0": 110.0,
+        "numberTable.0.areas.1": 200.0,
+        "numberTable.0.areas.2": 310.0,
+        "numberTable.0.areas.3": 450.0,
+        "numberTable.0.areas.4": 610.0,
+        "numberTable.0.areas.5": 800.0,
+        "numberTable.29.areas.0": 3390.0,
+        "numberTable.29.areas.1": 6030.0,
+        "numberTable.29.areas.2": 9420.0,
+        "numberTable.29.areas.3": 13570.0,
+        "numberTable.29.areas.4": 18470.0,
+        "numberTable.29.areas.5": 24120.0,
+        "centresTable.0.centres": 60.0,
+        "centresTable.0.areas.0": 1880.0,
+        "centresTable.0.areas.1": 3350.0,
+        "centresTable.0.areas.6": 20940.0,
+        "centresTable.20.centres": 1000.0,
+        "centresTable.20.areas.0": 110.0,
+        "centresTable.20.areas.1": 200.0,
+        "centresTable.20.areas.6": 1250.0
+      }
+    },
+    {
+      "name": "REINFORCEMENT V5.00 fabric properties",
+      "sheetCells": "Fabric!F9:I28",
+      "inputs": {"db": 16, "count": 4, "centres": 200, "rounding": "-1", "mesh": "RL1218"},
+      "expect": {
+        "fabricTable.0.name": "RL1218",
+        "fabricTable.0.longArea": 1112.20233919,
+        "fabricTable.0.crossArea": 226.822989589,
+        "fabricTable.6.longArea": 453.646,
+        "fabricTable.7.longArea": 354.411,
+        "fabricTable.8.longArea": 290.44,
+        "fabricTable.9.longArea": 226.823,
+        "fabricTable.10.longArea": 178.924,
+        "fabricTable.11.longArea": 141.372,
+        "fabricTable.12.longArea": 89.35,
+        "fabricTable.13.longArea": 94.248,
+        "fabricTable.14.longArea": 59.567,
+        "fabricTable.15.longArea": 444.881,
+        "fabricTable.16.longArea": 359.681,
+        "fabricTable.17.longArea": 45.365
+      },
+      "tolerances": {
+        "fabricTable.0.longArea": 1e-10,
+        "fabricTable.0.crossArea": 1e-10,
+        "fabricTable.6.longArea": 1e-05,
+        "fabricTable.7.longArea": 1e-05,
+        "fabricTable.8.longArea": 1e-05,
+        "fabricTable.9.longArea": 1e-05,
+        "fabricTable.10.longArea": 1e-05,
+        "fabricTable.11.longArea": 1e-05,
+        "fabricTable.12.longArea": 1e-05,
+        "fabricTable.13.longArea": 1e-05,
+        "fabricTable.14.longArea": 1e-05,
+        "fabricTable.15.longArea": 1e-05,
+        "fabricTable.16.longArea": 1e-05,
+        "fabricTable.17.longArea": 1e-05
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+id = "concrete-reinforcement-rate"
+name = "Reinforcement Rate"
+short = "Reinforcement Rate"
+standard = "AS 3600:2018 Amdt 1 and 2 (quantity calculation, no design check)"
+folder = "08 - REINFORCEMENT RATE"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_reinforcement_rate.headless"
+defaultSubject = "Reinforcement rate"
+calcType = "Reinforcement rate"
+description = "Weight of reinforcement per cubic metre of concrete for a nominated member and bar schedule, including transverse ligature sets. A quantity calculation, not a design check. Transcribed from the retained Structural Toolkit REINFORCEMENT RATE V5.00 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

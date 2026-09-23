@@ -21,9 +21,9 @@ alongside this brief. Where the two disagree, the specification wins.
 
 > You are writing a new headless calculation module for the InnoCalc suite
 > (`c:\CODING\INNOCALC`). The module is a pure Python function library. InnoCalc Manager
-> discovers it through one registry entry, builds its input form from the schema it publishes,
+> discovers it through one `suite.toml` entry, builds its input form from the schema it publishes,
 > calls `compute()` and displays the HTML `render()` returns. **No front-end or back-end change
-> to the manager is permitted** beyond that one registry line.
+> to the manager is permitted** beyond that one manifest entry.
 
 ## A2. Non-negotiable architecture
 
@@ -39,18 +39,26 @@ alongside this brief. Where the two disagree, the specification wins.
 ## A3. Files to produce
 
 ```
-<ModuleFolder>/
-  <pkg>/
-    __init__.py       puts the suite root on sys.path so calcpad resolves standalone and hosted
+calculations/<discipline>/<id>/
+  pyproject.toml     installable module package
+  src/<pkg>/
+    __init__.py       no fixed directory-depth bootstrap
+    module.toml       identity, standard, maintainer and planned/available status
     version.py        VERSION = "V0.01"
     headless.py       the contract: the seven required functions and DESCRIPTOR
     engine.py         the calculation. Pure functions, SI internally, no presentation.
     report.py         calcpad blocks only. No arithmetic beyond formatting.
     validation.py     self-consistency sweep and worked-example comparison
-    dev.py            CLI harness (see A6)
-  styles.css          optional, module-specific sheet styling only
-InnoCalcManager/icm/registry.py    one added entry
+    dev.py            thin wrapper around the shared SDK runner (see A6)
+  tests/              contract and engineering release gates
+  examples/           reviewed inputs and expected outputs
+  reference/          unchanged source evidence and provenance
+suite.toml            one added entry, initially enabled = false
 ```
+
+Generate this structure with `python -m tooling new`; see `docs/DEVELOPMENT.md`.
+The generated engineering placeholder and release tests must fail until implemented.
+Generated reports and scratch extracts belong under the suite `artifacts/` folder.
 
 `engine.py` must be usable and testable without `report.py`, and `report.py` must not
 recompute anything. If a number appears on the sheet it was produced by the engine and is
@@ -221,7 +229,7 @@ engineer wants that is not implied by the standard.
 
 The generated module is accepted only when all of the following hold.
 
-- [ ] `<pkg>/__init__.py` puts the suite root on `sys.path`; `import calcpad` works standalone.
+- [ ] Suite and module packages install; `import calcpad` works standalone without fixed path-depth assumptions.
 - [ ] `headless.py` implements the seven required functions with the exact signatures in A4.
 - [ ] Every `schema()` field id exists in `defaults()`, and no key in `defaults()` is orphaned.
 - [ ] `compute(defaults())` succeeds and returns `util`, `worstUtil` and `checks`.
@@ -236,8 +244,8 @@ The generated module is accepted only when all of the following hold.
       manager running.
 - [ ] `validate()` self-consistency passes across the whole input range in B2.
 - [ ] Every worked example in B7 reproduces within its stated tolerance.
-- [ ] One entry added to `InnoCalcManager/icm/registry.py`.
-- [ ] `python server.py` in `InnoCalcManager` reports the module loaded with no problems, the
+- [ ] One entry in `suite.toml`, enabled only after independent engineering review and passing release tests.
+- [ ] `python server.py` in `apps/manager` reports the module loaded with no problems, the
       form builds, a calculation computes, renders, saves and exports to PDF.
 - [ ] A `README.md` in the module folder: scope, standard, checks, limits of validity,
       validation status.
@@ -406,9 +414,9 @@ rebuildable artefacts.
 
 | Module | Copy this from it |
 |--------|-------------------|
-| `SteelMemberDesign/smd/headless.py` | Catalogue-backed fields, optional check groups, module actions, exchange producer. |
-| `ConcreteColumnDesign/ccd/headless.py` | Conditional fields (`showWhen`), always-on checks, presets, layered validation (`ccd/validation.py`). |
-| `CalculationPad/cpd/headless.py` | Custom editor, PDF attachments, safe expression evaluation behind an AST allow-list. |
+| `calculations/steel/member/smd/headless.py` | Catalogue-backed fields, optional check groups, module actions, exchange producer. |
+| `calculations/concrete/column/ccd/headless.py` | Conditional fields (`showWhen`), always-on checks, presets, layered validation (`ccd/validation.py`). |
+| `calculations/general/calculation_pad/src/cpd/headless.py` | Custom editor, PDF attachments, safe expression evaluation behind an AST allow-list. |
 
 **Read one of these end to end before writing anything.** A new module should look like it was
 written by the same hand on the same day.
