@@ -10,8 +10,11 @@ artifacts/
 
 # Per-machine data written by the tools
 apps/manager/data/
+apps/manager/backups/
 
-# Published as independent Git repositories
-calculations/general/calculation_pad/
-calculations/concrete/column/
-calculations/steel/member/
+# Deployment settings hold secrets and per-instance values
+.env
+deploy/.env
+deploy/*.env
+
+# Steel, Concrete Column and Calculation Pad are Git submodules (.gitmodules), not ignored.

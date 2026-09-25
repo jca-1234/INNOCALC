@@ -78,6 +78,20 @@ class LibraryTransactions(unittest.TestCase):
                     raise RuntimeError("Abort")
             self.assertNotIn("After", json.loads(library.path.read_bytes())["packages"])
 
+    def test_show_superseded_lists_earlier_revisions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            library = Library(temporary)
+            save_example(library, "1")
+            save_example(library, "1")
+            hidden = library.index()["calculations"]
+            self.assertEqual(len(hidden), 1)
+            self.assertEqual(hidden[0]["history"], [])
+            shown = library.index(show_superseded=True)["calculations"]
+            self.assertEqual([item["rev"] for item in shown[0]["history"]], [1])
+            self.assertTrue(shown[0]["history"][0]["superseded"])
+            self.assertTrue(Path(shown[0]["history"][0]["htmlPath"]).is_file())
+            self.assertFalse(shown[0]["superseded"])
+
 
 if __name__ == "__main__":
     unittest.main()

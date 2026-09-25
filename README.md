@@ -10,10 +10,22 @@ Run `setup.bat` explicitly to create the suite-owned `.venv`, install the pinned
 dependencies and check the modules. Then run `InnoCalc.bat`. Starting the manager
 or opening a calculation does not install dependencies.
 
-This workspace currently contains four Git repositories. The root repository
-does not contain the Steel, Concrete or Calculation Pad repositories. Keep their
-histories and uncommitted changes; see `docs/DEVELOPMENT.md` before cloning or moving
-them. New calculations belong to this repository under `calculations/`.
+Steel, Concrete Column and Calculation Pad are Git submodules. Clone with
+`git clone --recurse-submodules` (or run `git submodule update --init --recursive`;
+`setup.bat` does this when they are missing). See `docs/DEVELOPMENT.md` before
+committing inside them. New calculations belong to this repository under `calculations/`.
+
+## Guides
+
+* [README-ENDUSER.md](README-ENDUSER.md) - using InnoCalc, step by step.
+* [README-USER-CALCDEVELOPMENT.md](README-USER-CALCDEVELOPMENT.md) - developing and validating
+  calculation modules.
+* `docs/training/InnoCalc - Calculation Pad Training.pptx` - Calculation Pad training deck
+  (rebuilt by `docs/training/build_calcpad_training.py`).
+* [ROADMAP.md](ROADMAP.md) - known gaps and planned improvements.
+* [docs/DOCKER-DEPLOYMENT.md](docs/DOCKER-DEPLOYMENT.md) - server deployment and its critical steps.
+
+Versions are `vMajor.Patch.Minor` and restarted at `v0.0.1` for the software and every module.
 
 ## Folder Layout
 
@@ -52,6 +64,14 @@ See `docs/DEVELOPMENT.md` for scaffolding, source ownership and release checks.
 `clean` is a dry run unless `--apply` is supplied. It only removes build metadata
 and bytecode caches; environments, reference evidence, project data and artifacts
 are excluded. Module-local virtual environments are no longer needed.
+
+## Server Deployment
+
+The manager is prepared to run as a tenant of the shared internal application
+host (production plus a read-only preview, behind the reverse proxy, LAN and VPN
+only). Settings are listed in `.env.example`; behaviour is described in
+`apps/manager/README.md` under *Running on the application host*. What remains
+before containerisation is in `docs/DEPLOYMENT-GAP-ASSESSMENT.md`.
 
 ## Saved Revisions
 

@@ -11,6 +11,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -21,3 +23,43 @@ jobs:
       - run: python -m unittest discover -s tests -p test_revision_snapshots.py -v
       - run: python -m unittest discover -s tests -p test_scaffolding.py -v
       - run: python -m unittest discover -s tests -p test_clean.py -v
+      - run: python -m unittest discover -s tests -p test_feedback.py -v
+      - run: python -m unittest discover -s tests -p test_portable_paths.py -v
+      - run: python -m unittest discover -s tests -p test_locking.py -v
+
+  # Critical step C2.2: PDF printing inside the tenant image, non-root with a read-only root.
+  container-pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - run: docker build --build-arg GIT_SHA=${{ github.sha }} -t innocalc:ci .
+      - name: PDF smoke inside the image
+        run: |
+          mkdir -p out && chmod 777 out
+          docker run --rm --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges -u 1001:1001 -v "$PWD/out:/out" -w /app \
+            innocalc:ci python -m tooling.smoke --output /out/smoke
+      - name: Health, Host allow-list and container health check
+        run: |
+          docker run -d --name ic --read-only --tmpfs /tmp --tmpfs /data --tmpfs /backups \
+            --tmpfs /projects --cap-drop ALL --security-opt no-new-privileges -u 1001:1001 \
+            -e ICM_ALLOWED_HOSTS=innocalc.test -e ICM_HEALTH_HOST=innocalc.test innocalc:ci
+          for i in $(seq 1 30); do
+            state=$(docker inspect -f '{{.State.Health.Status}}' ic)
+            [ "$state" = healthy ] && break
+            sleep 5
+          done
+          docker logs ic
+          [ "$state" = healthy ]
+          docker exec ic python -c "import json, urllib.request as u; r = json.load(u.urlopen(u.Request('http://127.0.0.1:8125/api/health', headers={'Host': 'innocalc.test'}))); print(r); assert r['checks']['pdfBrowser'], r"
+          code=$(docker exec ic python -c "import urllib.request as u, urllib.error as e
+          try: u.urlopen(u.Request('http://127.0.0.1:8125/api/health', headers={'Host': 'evil.test'}))
+          except e.HTTPError as x: print(x.code)")
+          [ "$code" = 400 ]
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-smoke
+          path: out/

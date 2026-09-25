@@ -7,7 +7,7 @@
 | Entry point | `ic_concrete_reinforcement_tables.headless` |
 | Filing folder | `10 - REINFORCEMENT TABLES` |
 | Category | `Concrete` |
-| Version | `0.1.0.dev0` |
+| Version | `v0.0.1` |
 | Status | `planned`, `enabled = false` |
 | Source workbook | `Concrete_Reinforcement_500.xls` (Structural Toolkit REINFORCEMENT V5.00) |
 

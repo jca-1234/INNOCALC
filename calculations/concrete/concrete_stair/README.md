@@ -8,7 +8,7 @@
 | Filing folder | `07 - CONCRETE STAIR` |
 | Category | `Concrete` |
 | Standard | AS 3600:2018 incl. Amendments 1 and 2; AS/NZS 1170.0:2002 |
-| Version | `0.1.0.dev0` |
+| Version | `v0.0.1` |
 | Status | `planned`, `enabled = false` |
 | Source workbook | `Concrete_Stair_506.xls` (Structural Toolkit CONCRETE STAIRS V5.06) |
 

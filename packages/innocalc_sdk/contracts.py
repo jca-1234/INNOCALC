@@ -5,6 +5,8 @@ import inspect
 import math
 from typing import Any
 
+from . import versioning
+
 REQUIRED = ("descriptor", "schema", "defaults", "compute", "render", "summarise", "identity")
 
 
@@ -20,6 +22,11 @@ def check_contract(adapter: Any) -> dict[str, Any]:
         for key in ("id", "name", "entry", "folder", "version", "standard", "status"):
             if not descriptor.get(key):
                 failures.append(f"Missing descriptor value: {key}")
+        if descriptor.get("version"):
+            try:
+                versioning.parse(descriptor["version"])
+            except ValueError as exc:
+                failures.append(str(exc))
         schema, inputs = adapter.schema(), adapter.defaults()
         fields = [field for group in schema.get("groups", []) + schema.get("optional", [])
                   for field in group.get("fields", [])]

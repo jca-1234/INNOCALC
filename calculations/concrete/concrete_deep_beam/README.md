@@ -8,7 +8,7 @@
 | Filing folder | `06 - CONCRETE DEEP BEAM` |
 | Category | `Concrete` |
 | Method | Superseded CEB approach after Warner, Rangan, Hall and Faulkes (WRHF) |
-| Version | `0.1.0.dev0` |
+| Version | `v0.0.1` |
 | Status | `planned`, `enabled = false` |
 | Source workbook | `Concrete_DeepBeam_502.xls` (Structural Toolkit DEEP BEAMS V5.02) |
 

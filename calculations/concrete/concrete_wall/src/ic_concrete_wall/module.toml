@@ -1,0 +1,15 @@
+id = "concrete-wall"
+name = "Concrete Wall Design"
+short = "Concrete Wall"
+standard = "AS 3600:2018 Amdt 1 and 2"
+folder = "15 - CONCRETE WALL"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_wall.headless"
+defaultSubject = "Concrete wall design"
+calcType = "Concrete wall"
+description = "Braced reinforced concrete wall per metre run to AS 3600:2018 Section 11: Cl 11.4 effective height, Cl 11.1 design-method selection, Cl 11.5 simplified design axial strength, Cl 11.6 in-plane shear and Cl 11.7 reinforcement, with optional Cl 5.7 fire resistance, Cl 11.7.2 crack control and Section 4 cover checks. Transcribed from the retained Structural Toolkit CONCRETE WALLS V5.11 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

@@ -31,7 +31,8 @@ import calcpad
 
 from . import mail
 from . import pdf as pdf_tools
-from .library import Library, safe_name, transaction_method
+from .library import QA_PATHS, Library, safe_name, transaction_method
+from .paths import portable
 
 QA_ROOT = Path("06-QA") / "03-Verification"
 # Files the tool writes itself; anything else in the folder is a verifier return.
@@ -166,6 +167,19 @@ class QAStore:
             raise ValueError("That verification package is not in this project")
         return package
 
+    def folder(self, package: dict[str, Any]) -> Path:
+        return self.library.locate(package["folder"])
+
+    def _portable(self, path: Any) -> str:
+        return portable(path, self.library.project_folder)
+
+    def public(self, package: dict[str, Any]) -> dict[str, Any]:
+        """The package as the browser sees it: real paths on this machine, no sheet entries."""
+        shown = {key: value for key, value in package.items() if key != "entries"}
+        shown.update({key: str(self.library.locate(package[key])) for key in QA_PATHS
+                      if package.get(key)})
+        return shown
+
     def can_access(self, package: dict[str, Any], actor: dict[str, Any]) -> bool:
         """Designers on the project and the nominated verifier may open a package."""
         email = str(actor.get("email", "")).casefold()
@@ -217,7 +231,7 @@ class QAStore:
             "createdBy": actor.get("email", ""),
             "createdAt": datetime.now().isoformat(timespec="seconds"),
             "date": datetime.now().strftime("%d/%m/%Y"),
-            "folder": str(folder), "status": "Issued for verification",
+            "folder": self._portable(folder), "status": "Issued for verification",
             "calculations": list(selection or []),
             "documents": list(documents or []),
             "methods": {item["id"]: bool((methods or {}).get(item["id"], item["default"]))
@@ -227,7 +241,8 @@ class QAStore:
                           for item in STATEMENT_ITEMS},
             "producerComments": str(producer_comments or ""),
             "generalComments": "",
-            "drawingSet": dict(drawing_set or {}),
+            "drawingSet": {**(drawing_set or {}), **({"path": self._portable(drawing_set["path"])}
+                                                     if (drawing_set or {}).get("path") else {})},
             "action": "", "endorsed": None,
             "comments": self.deferred_carry_forward(),
         }
@@ -235,8 +250,8 @@ class QAStore:
                                   folder / "Calculations.pdf", sort_fields=sort_fields,
                                   drawings=drawings, reference=package["ref"],
                                   purpose="VERIFICATION", verifier_initials=initials)
-        package["calculationPdf"] = built["pdfPath"]
-        package["drawingsPdf"] = built["drawingsPath"]
+        package["calculationPdf"] = self._portable(built["pdfPath"])
+        package["drawingsPdf"] = self._portable(built["drawingsPath"])
         package["watermark"] = built["watermark"]
         package["calculationSheets"] = built["sheets"]
         package["entries"] = [{key: entry.get(key) for key in
@@ -254,15 +269,17 @@ class QAStore:
                     "date": str(drawing_set.get("date", package["date"]))})
         self.packages.append(package)
         self._write_documents(package)
-        package["draftEmail"] = self.draft_email(package, actor)
+        draft = self.draft_email(package, actor)
+        package["draftEmail"] = {**draft, "path": self._portable(draft.get("path", ""))}
         self.library.write()
         return package
 
     def draft_email(self, package: dict[str, Any], actor: dict[str, Any]) -> dict[str, Any]:
         """Raise an unsent Outlook message to the verifier with the package links."""
-        folder = Path(package["folder"])
-        links = [("Calculations for verification", package.get("calculationPdf", "")),
-                 ("Drawings", package.get("drawingsPdf", "")),
+        folder = self.folder(package)
+        shown = self.public(package)
+        links = [("Calculations for verification", shown.get("calculationPdf", "")),
+                 ("Drawings", shown.get("drawingsPdf", "")),
                  ("Verification form", str(folder / "Verification Form.html")),
                  ("Verification package folder", str(folder))]
         subject = (f"{self.project.get('code', '')} {self.project.get('projectName', '')} - "
@@ -290,7 +307,9 @@ class QAStore:
         """
         added, scanned = 0, 0
         for package in self.packages:
-            folder = Path(package.get("folder", ""))
+            if not package.get("folder"):
+                continue
+            folder = self.folder(package)
             if not folder.is_dir():
                 continue
             ours = set(PRODUCED)
@@ -416,7 +435,7 @@ class QAStore:
             "initials": actor.get("initials", ""),
             "at": datetime.now().isoformat(timespec="minutes"),
             "action": action, "note": str(note or ""),
-            "registerFile": str(register)}
+            "registerFile": self._portable(register)}
         for comment in package["comments"]:
             if comment.get("status") == "Deferred":
                 comment["carriedInto"] = ""
@@ -446,7 +465,7 @@ class QAStore:
 
     # -- documents ----------------------------------------------------------
     def _write_documents(self, package: dict[str, Any]) -> None:
-        folder = Path(package["folder"])
+        folder = self.folder(package)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "package.json").write_text(
             json.dumps(package, indent=2, ensure_ascii=True, default=str), encoding="utf-8")
@@ -455,7 +474,7 @@ class QAStore:
         self._write_register(package)
 
     def _write_register(self, package: dict[str, Any], final: bool = False) -> Path:
-        folder = Path(package["folder"])
+        folder = self.folder(package)
         name = "Comment Register - FINAL" if final else "Comment Register"
         (folder / f"{name}.html").write_text(render_register(self.project, package),
                                              encoding="utf-8")
@@ -476,7 +495,7 @@ class QAStore:
     def export_pdf(self, package_id: str) -> dict[str, str]:
         """Print the verification form and register to PDF."""
         package = self.get(package_id)
-        folder = Path(package["folder"])
+        folder = self.folder(package)
         written = {}
         for name in ("Verification Form", "Comment Register"):
             source = folder / f"{name}.html"

@@ -1,35 +1,49 @@
-:root{--ink:#202326;--muted:#687078;--line:#c8cdd1;--paper:#fff;--panel:#f4f5f3;--accent:#176b58;--danger:#a72b32;--warn:#8a5a00}
+/* InnoCalc theme: the InnoResource palette and shell, so the Innovis tools read as one family. */
+:root{--bg:#f4f6f9;--ink:#1c2431;--muted:#5b6675;--line:#d8dee7;--line-strong:#b8c2cf;--paper:#fff;--panel:#f7f9fc;--accent:#123b63;--accent-hover:#1a4e80;--accent-soft:#e6eef7;--focus:#1a73e8;--danger:#b3261e;--warn:#a86a12;--ok:#137333}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;color:var(--ink);background:#d9dddc;font-family:"Aptos","Segoe UI",sans-serif}
+html,body{margin:0;height:100%;color:var(--ink);background:var(--bg);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;font-size:14px}
+/* The calculation sheet theme is loaded afterwards and styles html/body for printing. */
+html:has(> body.innocalc),body.innocalc{background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif}
 button,a,.import,input,select,textarea{font:inherit}
-button,.toolbar a,.import{border:1px solid #aeb5b5;background:#fff;color:var(--ink);padding:7px 10px;text-decoration:none;cursor:pointer}
-button:hover:not(:disabled),.toolbar a:hover{border-color:var(--accent)}
-button:disabled{opacity:.5;cursor:default}
+button,.toolbar a,.import{border:1px solid var(--line-strong);border-radius:5px;background:#fff;color:var(--ink);padding:6px 12px;text-decoration:none;cursor:pointer}
+button:hover:not(:disabled),.toolbar a:hover{background:var(--accent-soft)}
+button:disabled{opacity:.55;cursor:not-allowed}
 button.primary,.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.primary:hover:not(:disabled){background:var(--accent-hover)}
 button.danger{border-color:var(--danger);color:var(--danger)}
 button.active{box-shadow:inset 0 -3px var(--accent)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--focus)!important;box-shadow:0 0 0 2px rgba(26,115,232,.15)}
 /* Class-based display rules would otherwise beat the user-agent [hidden] rule. */
 [hidden]{display:none!important}
+.read-only-notice{font-size:12px;font-weight:600;color:#ffeb84}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* ---- toolbar ---- */
-.toolbar{min-height:52px;display:flex;align-items:center;gap:8px;padding:0 12px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;flex-wrap:wrap}
-.toolbar strong{font-family:"Bahnschrift",sans-serif;font-size:17px;white-space:nowrap}
-.toolbar strong span{color:var(--accent)}
-.toolbar button{padding:6px 9px;font-size:13px}
-.toolbar .standard{font-size:12px;color:var(--muted)}
-.toolbar nav{display:flex;gap:4px}
+.toolbar{min-height:46px;display:flex;align-items:center;gap:8px;padding:0 14px;background:var(--accent);color:#fff;position:sticky;top:0;z-index:20;flex-wrap:nowrap}
+/* One row keeps the workspace height exact; the module badge gives way first. */
+.toolbar>*{flex-shrink:0}
+.toolbar>#moduleBadge{flex-shrink:1;min-width:0}
+.toolbar>#projectSelect{flex-shrink:1;min-width:120px}
+.app-brand{display:flex;align-items:center;gap:8px;font-weight:600;white-space:nowrap;margin-right:6px}
+.app-brand-mark{background:#fff;color:var(--accent);border-radius:5px;width:26px;height:26px;display:grid;place-items:center;font-size:12px;font-weight:700}
+.version-tag{font-size:11px;font-weight:400;color:#cfe0f0}
+.toolbar button{background:transparent;border:0;color:#cfe0f0;padding:6px 12px;border-radius:5px 5px 0 0;font-size:13px}
+.toolbar button:hover:not(:disabled),.toolbar button.active{background:rgba(255,255,255,.16);color:#fff;box-shadow:none}
+.toolbar button.primary{background:#fff;color:var(--accent);border-radius:5px;font-weight:600}
+.toolbar button.primary:hover:not(:disabled){background:var(--accent-soft)}
+.toolbar nav{display:flex;gap:2px}
 .toolbar .spacer{flex:1}
-.toolbar select{border:1px solid #aeb5b5;background:#fff;color:var(--ink);padding:6px 8px;cursor:pointer;font-size:13px}
-.toolbar select:hover{border-color:var(--accent)}
+.toolbar select{border:1px solid rgba(255,255,255,.3);border-radius:5px;background:rgba(255,255,255,.12);color:#fff;padding:5px 8px;cursor:pointer;font-size:13px}
+.toolbar select option,.toolbar select optgroup{color:var(--ink);background:#fff}
 #projectSelect{max-width:280px;min-width:170px}
-#moduleBadge{font-size:11px;color:var(--muted);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#currentUser{font-size:12px;color:var(--muted);white-space:nowrap}
-.dirty-dot{display:none;width:8px;height:8px;border-radius:50%;background:var(--warn)}
+#moduleBadge{font-size:11px;color:#cfe0f0;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#currentUser{font-size:12px;color:#fff;white-space:nowrap;background:rgba(255,255,255,.14);padding:3px 10px;border-radius:12px}
+#currentUser:empty{display:none}
+.dirty-dot{display:none;width:8px;height:8px;border-radius:50%;background:#ffeb84}
 body.dirty .dirty-dot{display:inline-block}
 
 /* ---- workspace ---- */
-.workspace{display:grid;grid-template-columns:230px 360px minmax(700px,1fr);height:calc(100vh - 53px);overflow:hidden}
+.workspace{display:grid;grid-template-columns:230px 360px minmax(700px,1fr);height:calc(100vh - 47px);overflow:hidden}
 .workspace.wide{grid-template-columns:1fr}
 .navigator,.inputs{background:var(--panel);border-right:1px solid var(--line);overflow:auto}
 .navigator{padding:12px}
@@ -39,71 +53,91 @@ body.dirty .dirty-dot{display:inline-block}
 .tree details{margin:6px 0 0 6px}
 .tree summary{cursor:pointer;font-weight:600}
 .tree button{display:block;border:0;background:transparent;padding:3px 6px;color:var(--accent);text-align:left;width:100%}
-.tree button:hover{background:#e6ebe9}
-.tree button.selected{background:#dce7e3;font-weight:650}
+.tree button:hover{background:var(--accent-soft)}
+.tree button.selected{background:#dbe6f3;font-weight:650}
 .inputs{padding:10px}
-.panel-heading h1,.view-head h1{font:600 18px/1 "Bahnschrift",sans-serif;margin:5px}
+.panel-heading h1,.view-head h1{font:600 18px/1.1 "Segoe UI",system-ui,sans-serif;color:var(--accent);margin:5px}
 .panel-heading span{font-size:11px;color:var(--muted)}
 .inputs>details,.optional{border-bottom:1px solid var(--line);background:#fff}
 .inputs>details>summary,.optional>label{display:block;padding:9px;font-weight:650;font-size:13px;cursor:pointer}
 .field-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;padding:0 9px 10px}
 .field-grid label{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:3px}
 .field-grid label.wide,.field-grid .wide{grid-column:1/-1}
-.field-grid input,.field-grid select,.field-grid textarea{border:1px solid var(--line);background:#fff;padding:5px 6px;color:var(--ink);font-size:13px;width:100%}
+.field-grid input,.field-grid select,.field-grid textarea{border:1px solid var(--line-strong);border-radius:5px;background:#fff;padding:5px 6px;color:var(--ink);font-size:13px;width:100%}
 .field-grid label.check{flex-direction:row;align-items:center;gap:6px;font-size:12px;color:var(--ink)}
 .field-grid label.check input{width:auto}
 .field-grid .hint{grid-column:1/-1;font-size:11px;color:var(--muted);margin:0}
 .optional>label{display:flex;align-items:center;gap:8px}
 .optional details[data-panel]{border-top:1px solid var(--line)}
-.report{overflow:auto;background:#d9dddc;padding:8px 0}
-.report .empty{margin:40px auto;max-width:520px;background:#fff;border:1px solid var(--line);padding:24px;text-align:center;color:var(--muted)}
+.report{overflow:auto;background:#dfe4eb;padding:8px 0}
+.report .empty{margin:40px auto;max-width:520px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:24px;text-align:center;color:var(--muted)}
 
 /* ---- generic views ---- */
-.view{padding:12px 16px;overflow:auto;background:#eef0ef}
+.view{padding:12px 16px;overflow:auto;background:var(--bg)}
 .view-head{margin-bottom:10px}
 .view-head h1{margin:0}
-.card{background:#fff;border:1px solid var(--line);padding:12px;margin-bottom:12px}
-.card h2{font:600 14px/1.2 "Bahnschrift",sans-serif;margin:0 0 8px;border-bottom:1px solid var(--line);padding-bottom:6px}
-.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
-.filters label{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:3px}
-.filters input,.filters select{border:1px solid var(--line);padding:5px 6px;background:#fff;min-width:130px}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:12px}
+.card h2{font:600 13.5px/1.2 "Segoe UI",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 8px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.filters label{display:flex;flex-direction:column;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);gap:3px}
+.filters label.check{text-transform:none;letter-spacing:0}
+.filters input,.filters select{border:1px solid var(--line-strong);border-radius:5px;padding:5px 7px;background:#fff;min-width:130px}
 .filters input[type=checkbox]{min-width:0;width:auto}
 .filters input[type=search]{min-width:220px}
 table.data{width:100%;border-collapse:collapse;font-size:12px;background:#fff}
-table.data th{position:sticky;top:0;background:#eef0ef;border-bottom:1px solid var(--line);text-align:left;padding:5px 6px;white-space:nowrap;z-index:1}
-table.data td{border-bottom:1px solid #e3e6e5;padding:4px 6px;vertical-align:middle}
+table.data th{position:sticky;top:0;background:#eef2f7;border-bottom:1px solid var(--line-strong);text-align:left;padding:6px;white-space:nowrap;z-index:1;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+table.data td{border-bottom:1px solid var(--line);padding:4px 6px;vertical-align:middle}
 table.data tr.superseded{opacity:.55}
-table.data tr:hover td{background:#f6f8f7}
-table.data input,table.data select,table.data textarea{border:1px solid var(--line);padding:3px 4px;width:100%;background:#fff}
+table.data tr:hover td{background:#f5f8fc}
+table.data input,table.data select,table.data textarea{border:1px solid var(--line);border-radius:4px;padding:3px 4px;width:100%;background:#fff}
 table.data td.nowrap,table.data th.nowrap{white-space:nowrap}
 .util{font-variant-numeric:tabular-nums;font-weight:650}
 .util.over{color:var(--danger)}
-.pill{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:650;color:#fff}
-.pill.ok{background:#176b3a}.pill.fail{background:var(--danger)}.pill.open{background:var(--danger)}
-.pill.closed{background:#176b3a}.pill.deferred{background:var(--warn)}.pill.noted{background:#456}
+.pill{display:inline-block;padding:1px 9px;border-radius:10px;font-size:11.5px;font-weight:600}
+.pill.ok,.pill.closed{background:#dcf1e2;color:#17612f}
+.pill.fail,.pill.open{background:#fbdcdc;color:#96201c}
+.pill.deferred{background:#fdf3d3;color:#7a5c00}
+.pill.noted{background:var(--accent-soft);color:var(--accent)}
 .muted{color:var(--muted)}
 .row-actions{display:flex;gap:4px;white-space:nowrap}
 .row-actions button{padding:2px 6px;font-size:11px}
 .empty-state{padding:28px;text-align:center;color:var(--muted)}
+#projectsView .two-col label{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:3px;margin-bottom:8px}
+#projectsView .two-col input{border:1px solid var(--line);padding:6px 7px;background:#fff;font-size:13px;width:100%}
+#projectsView .two-col .wide{grid-column:1/-1}
+#projectsView .actions{display:flex;gap:8px;justify-content:flex-end}
+#projectsView p{font-size:12px}
+.feedback-triage{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;border-top:1px solid var(--line);padding-top:8px;margin-top:6px}
+.feedback-triage label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
+.feedback-triage textarea{width:100%;border:1px solid var(--line);padding:4px 6px;font:inherit}
+#feedbackTable details summary{cursor:pointer;font-weight:600}
+#feedbackTable details p{margin:6px 0;white-space:normal}
+dialog textarea{font:inherit}
+#signInDialog{max-width:420px}
+#signInDialog::backdrop{background:linear-gradient(160deg,#123b63,#2f6ba3)}
+.sign-in-brand{justify-content:center;margin:4px 0 0}
+.sign-in-brand .app-brand-mark{background:var(--accent);color:#fff}
+.sign-in-brand h1{margin:0;font-size:24px}
+#signInDialog form>p.muted{text-align:center;margin:4px 0}
 
 /* ---- dialogs ---- */
-dialog{border:1px solid var(--line);padding:0;max-width:min(940px,94vw);width:100%;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.28)}
-dialog::backdrop{background:rgba(20,25,25,.45)}
+dialog{border:1px solid var(--line-strong);border-radius:9px;padding:0;max-width:min(940px,94vw);width:100%;background:#fff;box-shadow:0 18px 44px rgba(0,0,0,.24)}
+dialog::backdrop{background:rgba(15,25,40,.45)}
 dialog form,dialog .dialog-body{padding:18px 20px 20px}
-dialog h1{font:600 20px/1.2 "Bahnschrift",sans-serif;margin:0 0 12px}
-dialog h2{font:600 15px/1.2 "Bahnschrift",sans-serif;margin:14px 0 8px;border-bottom:1px solid var(--line);padding-bottom:5px}
-dialog h3{font:600 13px/1.2 "Bahnschrift",sans-serif;margin:12px 0 6px}
+dialog h1{font:600 20px/1.2 "Segoe UI",system-ui,sans-serif;color:var(--accent);margin:0 0 12px}
+dialog h2{font:600 13.5px/1.2 "Segoe UI",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:14px 0 8px;border-bottom:1px solid var(--line);padding-bottom:5px}
+dialog h3{font:600 13px/1.2 "Segoe UI",system-ui,sans-serif;margin:12px 0 6px}
 dialog label{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:3px;margin-bottom:8px}
 dialog label.check{flex-direction:row;align-items:center;gap:7px;font-size:12px;color:var(--ink)}
-dialog input,dialog select,dialog textarea{border:1px solid var(--line);padding:6px 7px;background:#fff;font-size:13px;width:100%}
+dialog input,dialog select,dialog textarea{border:1px solid var(--line-strong);border-radius:5px;padding:6px 7px;background:#fff;font-size:13px;width:100%}
 dialog label.check input{width:auto}
 dialog .close{position:absolute;top:8px;right:10px;border:0;background:transparent;font-size:20px;line-height:1;padding:2px 6px}
 dialog .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 .error{color:var(--danger);font-size:12px;min-height:16px;margin:4px 0}
-.notice{background:#fff6e0;border-left:3px solid var(--warn);padding:8px 10px;font-size:12px;margin:8px 0}
+.notice{background:#fdf3d3;border-left:3px solid #d8a31a;border-radius:0 5px 5px 0;padding:8px 10px;font-size:12px;margin:8px 0}
 .module-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-.module-card{border:1px solid var(--line);padding:12px;text-align:left;background:#fff;cursor:pointer}
-.module-card:hover{border-color:var(--accent);background:#f4f8f6}
+.module-card{border:1px solid var(--line);border-radius:7px;padding:12px;text-align:left;background:#fbfcfe;cursor:pointer}
+.module-card:hover{border-color:var(--accent);background:var(--accent-soft)}
 .module-card b{display:block;font-size:14px;margin-bottom:3px}
 .module-card small{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
 .module-card p{margin:0;font-size:11.5px;color:#444}
@@ -152,33 +186,33 @@ dialog .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 /* ---- saving indicator ---- */
 .save-state{font-size:11px;color:var(--muted);white-space:nowrap;display:none}
 .save-state.busy,.save-state.done,.save-state.bad{display:inline-block}
-.save-state.busy{color:var(--warn)}
-.save-state.done{color:var(--accent)}
-.save-state.bad{color:var(--danger)}
-.save-state.busy::before{content:"";display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px;border:2px solid #d8c9a5;border-top-color:var(--warn);border-radius:50%;animation:spin .8s linear infinite}
+.save-state.busy{color:#ffeb84}
+.save-state.done{color:#9fe0b0}
+.save-state.bad{color:#ffb4ab}
+.save-state.busy::before{content:"";display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px;border:2px solid rgba(255,235,132,.35);border-top-color:#ffeb84;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 button.block{display:block;width:100%;margin:8px 0}
 
 /* ---- multi-select filter ---- */
 .multi{position:relative;font-size:11px;color:var(--muted)}
-.multi>button{display:block;min-width:150px;text-align:left;padding:5px 6px;font-size:12px;color:var(--ink)}
+.multi>button{display:block;min-width:150px;text-align:left;padding:5px 7px;font-size:12px;color:var(--ink);text-transform:none;letter-spacing:0}
 .multi>button::after{content:"\25be";float:right;color:var(--muted)}
 .multi>button.on{border-color:var(--accent);font-weight:650}
-.multi .multi-panel{position:absolute;z-index:30;top:100%;left:0;min-width:210px;max-height:260px;overflow:auto;background:#fff;border:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.18);padding:6px}
+.multi .multi-panel{position:absolute;z-index:30;top:100%;left:0;min-width:210px;max-height:260px;overflow:auto;background:#fff;border:1px solid var(--line-strong);border-radius:6px;box-shadow:0 8px 22px rgba(0,0,0,.22);padding:6px}
 .multi .multi-panel label{display:flex;flex-direction:row;align-items:center;gap:6px;padding:3px 4px;font-size:12px;color:var(--ink);cursor:pointer}
-.multi .multi-panel label:hover{background:#eef3f1}
+.multi .multi-panel label:hover{background:#eef4fb}
 .multi .multi-panel input{width:auto}
 .multi .multi-panel .multi-actions{display:flex;gap:6px;border-top:1px solid var(--line);margin-top:5px;padding-top:5px}
 .multi .multi-panel .multi-actions button{flex:1;padding:3px 5px;font-size:11px}
-.multi-label{display:block;margin-bottom:3px}
+.multi-label{display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
 
 /* ---- module chooser tree ---- */
 .module-search{max-width:340px}
 .module-browser{display:grid;grid-template-columns:210px minmax(0,1fr);gap:12px;min-height:320px;max-height:56vh}
-.module-browser .tree{overflow:auto;border:1px solid var(--line);padding:8px;background:var(--panel);font-size:13px}
+.module-browser .tree{overflow:auto;border:1px solid var(--line);border-radius:7px;padding:8px;background:var(--panel);font-size:13px}
 .module-browser .tree button{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;background:transparent;padding:5px 6px;color:var(--ink);text-align:left}
-.module-browser .tree button:hover{background:#e6ebe9}
-.module-browser .tree button.selected{background:#dce7e3;font-weight:650}
+.module-browser .tree button:hover{background:var(--accent-soft)}
+.module-browser .tree button.selected{background:#dbe6f3;font-weight:650}
 .module-browser .tree button.empty{color:var(--muted)}
 .module-browser .tree button small{color:var(--muted)}
 .module-browser .module-cards{overflow:auto;align-content:start;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
@@ -196,7 +230,7 @@ button.block{display:block;width:100%;margin:8px 0}
 /* ---- index links and superseded rows ---- */
 table.data tr.superseded td{color:#8b9196}
 table.data tr.superseded a,table.data tr.superseded .util{color:#8b9196}
-.icon-link{display:inline-flex;align-items:center;justify-content:center;padding:1px 4px;border:1px solid var(--line);background:#fff;line-height:0}
+.icon-link{display:inline-flex;align-items:center;justify-content:center;padding:1px 4px;border:1px solid var(--line);border-radius:4px;background:#fff;line-height:0}
 .icon-link:hover{border-color:var(--accent)}
 .icon-link svg{width:14px;height:14px}
 .icon-link.pdf svg{fill:var(--danger)}
@@ -207,7 +241,7 @@ table.data td.edit input:focus{border-color:var(--accent);background:#fff}
 
 
 /* ---- toast ---- */
-#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#22282a;color:#fff;padding:9px 16px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60;max-width:70vw}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#21303f;color:#fff;padding:9px 14px;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.25);font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60;max-width:70vw}
 #toast.show{opacity:1}
 #toast.bad{background:var(--danger)}
 

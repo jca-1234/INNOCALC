@@ -8,7 +8,7 @@
 | Filing folder | `09 - REINFORCEMENT DEVELOPMENT` |
 | Category | `Concrete` |
 | Standard | AS 3600:2018 incl. Amendments 1 and 2, Section 13 |
-| Version | `0.1.0.dev0` |
+| Version | `v0.0.1` |
 | Status | `planned`, `enabled = false` |
 | Source workbook | `Concrete_Development_506.xls` (Structural Toolkit REINFORCEMENT DEVELOPMENT V5.06) |
 

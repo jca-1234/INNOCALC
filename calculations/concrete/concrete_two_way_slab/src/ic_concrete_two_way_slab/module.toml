@@ -1,0 +1,15 @@
+id = "concrete-two-way-slab"
+name = "Concrete Two-Way Slab Design"
+short = "Two-Way Slab"
+standard = "AS 3600:2018 Amdt 1 and 2"
+folder = "11 - CONCRETE TWO-WAY SLAB"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_two_way_slab.headless"
+defaultSubject = "Two-way slab design"
+calcType = "Concrete two-way slab"
+description = "Simplified Cl 6.10.3 design moments for a reinforced two-way slab supported on four sides, with the Cl 9.1.1 minimum strength reinforcement and the deemed-to-comply span-to-depth deflection check. Transcribed from the retained Structural Toolkit TWO-WAY SLABS V5.02 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

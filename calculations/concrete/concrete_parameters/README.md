@@ -8,7 +8,7 @@
 | Filing folder | `05 - CONCRETE PARAMETERS` |
 | Category | `Concrete` |
 | Standard | AS 3600:2018 incl. Amendments 1 and 2; AS 2327:2017 |
-| Version | `0.1.0.dev0` |
+| Version | `v0.0.1` |
 | Status | `planned`, `enabled = false` |
 | Source workbook | `Concrete_Formula_502.xls` (Structural Toolkit FORMULA V5.02) |
 

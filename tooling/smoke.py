@@ -17,9 +17,10 @@ from unittest.mock import patch
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-pdf", action="store_true")
+    parser.add_argument("--output", type=Path, help="working folder (default artifacts/smoke-<id>)")
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    output = root / "artifacts" / f"smoke-{uuid.uuid4().hex[:8]}"
+    output = arguments.output or root / "artifacts" / f"smoke-{uuid.uuid4().hex[:8]}"
     project_folder = output / "projects" / "J9999 - TEST - SMOKE"
     project_folder.mkdir(parents=True)
     sys.path.insert(0, str(root / "apps/manager"))
@@ -101,7 +102,8 @@ def main() -> int:
         assert len(text) > 1000 and links >= len(selection)
         report = {"ok": True, "modules": checked, "pdfChecked": True, "pdfPages": len(document.pages),
                   "pdfAnnotations": links, "pdfTextCharacters": len(text),
-                  "flattened": built["flattened"], "output": str(output)}
+                  "flattened": built["flattened"], "browser": server.pdf_tools.available()["browser"],
+                  "output": str(output)}
         (output / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
         print(json.dumps(report, indent=2))
     finally:

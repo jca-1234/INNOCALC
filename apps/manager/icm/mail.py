@@ -11,15 +11,34 @@ from __future__ import annotations
 import html
 import os
 from email.message import EmailMessage
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .library import safe_name
+from .paths import relative
+
+# On the server the projects root is a Linux mount; readers open it as a Windows share.
+_SHARE = {"root": "", "share": ""}
+
+
+def set_share(root: str, share: str) -> None:
+    _SHARE.update(root=str(root or ""), share=str(share or ""))
+
+
+def user_path(path: str | Path) -> str:
+    """The path as the reader sees it: under the share when one is configured."""
+    found = relative(path, _SHARE["root"]) if _SHARE["share"] else None
+    if found is None:
+        return str(path)
+    return str(PureWindowsPath(_SHARE["share"], *[part for part in found.split("/") if part]))
 
 
 def _link(path: str | Path) -> str:
     """A file:// link Outlook renders as a clickable network path."""
-    return Path(path).absolute().as_uri()
+    shown = user_path(path)
+    if PureWindowsPath(shown).is_absolute():
+        return PureWindowsPath(shown).as_uri()
+    return Path(shown).absolute().as_uri()
 
 
 def compose(*, to: str, subject: str, intro: str, project: dict[str, Any],
@@ -40,7 +59,8 @@ def compose(*, to: str, subject: str, intro: str, project: dict[str, Any],
             f"<p><b>{html.escape(heading)}</b></p>"
             f"<ul>{rows}</ul>"
             f"<p>{html.escape(closing)}</p>")
-    plain = "\n".join([intro, heading, *[f"{label}: {target}" for label, target in links],
+    plain = "\n".join([intro, heading,
+                       *[f"{label}: {user_path(target)}" for label, target in links if target],
                        closing])
     message.set_content(plain)
     message.add_alternative(f"<html><body>{body}</body></html>", subtype="html")

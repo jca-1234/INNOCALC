@@ -1,0 +1,15 @@
+id = "concrete-strut-tie"
+name = "Concrete Strut-and-Tie Design"
+short = "Strut and Tie"
+standard = "AS 3600:2018 Amdt 1 and 2"
+folder = "12 - CONCRETE STRUT AND TIE"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_strut_tie.headless"
+defaultSubject = "Strut-and-tie design"
+calcType = "Concrete strut and tie"
+description = "Section 7 strut-and-tie checks of one bottle-shaped concrete strut, its bursting reinforcement (Cl 7.2.4), one tension tie with its development zone, the node stress limit (Cl 7.4.2) and bearing (Cl 12.6). Transcribed from the retained Structural Toolkit STRUT & TIE V5.04 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

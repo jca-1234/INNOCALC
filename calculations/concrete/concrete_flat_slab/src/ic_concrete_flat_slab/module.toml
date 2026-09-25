@@ -1,0 +1,15 @@
+id = "concrete-flat-slab"
+name = "Concrete Flat Slab Design"
+short = "Flat Slab"
+standard = "AS 3600:2018 Amdt 1 and 2"
+folder = "14 - CONCRETE FLAT SLAB"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_flat_slab.headless"
+defaultSubject = "Flat slab design"
+calcType = "Concrete flat slab"
+description = "Simplified Cl 6.10.4 design of a reinforced flat slab or flat plate with multiple spans: total static moments, Table 6.10.4.3 coefficients and column and middle strip moments, with the Cl 9.1.1 minimum strength reinforcement and the deemed-to-comply span-to-depth deflection check. Transcribed from the retained Structural Toolkit FLAT SLABS V5.04 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

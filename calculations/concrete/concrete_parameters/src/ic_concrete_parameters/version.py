@@ -4,11 +4,11 @@ The newest entry is first.  Bump ``VERSION`` and add an entry here for every
 change that reaches a user.
 """
 
-VERSION = "0.1.0.dev0"
+VERSION = "v0.0.1"
 
 VERSION_HISTORY = [
     {
-        "version": "0.1.0.dev0",
+        "version": "v0.0.1",
         "date": "2026-09-10",
         "author": "Automated transcription; engineering review outstanding",
         "summary": "First transcription of the retained FORMULA V5.02 workbook.",

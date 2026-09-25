@@ -7,7 +7,7 @@
 | Entry point | `ic_concrete_reinforcement_rate.headless` |
 | Filing folder | `08 - REINFORCEMENT RATE` |
 | Category | `Concrete` |
-| Version | `0.1.0.dev0` |
+| Version | `v0.0.1` |
 | Status | `planned`, `enabled = false` |
 | Source workbook | `Concrete_Rate_500.xls` (Structural Toolkit REINFORCEMENT RATE V5.00) |
 

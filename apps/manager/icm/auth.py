@@ -3,10 +3,10 @@
 Two mutually exclusive modes:
 
 ``development`` (the mode this release ships in)
-    No passwords exist anywhere in the product.  A user identifies themselves by
-    their Innovis email address; the directory records their display name and
-    initials so calculations remain attributable.  This is intended for use on
-    the internal network only and the server binds to localhost.
+    No passwords exist anywhere in the product.  A user picks their name from
+    the people list, or creates a new username from their full name; the
+    directory records their display name and initials so calculations remain
+    attributable.  This is intended for use on the internal network only.
 
 ``sso`` (scaffolded, deliberately inactive)
     Office 365 / Microsoft Entra ID authorisation-code flow with PKCE.  Every
@@ -85,6 +85,17 @@ def initials_for(full_name: str, email: str = "") -> str:
 def display_name_for(email: str) -> str:
     local = email.split("@", 1)[0]
     return " ".join(part.capitalize() for part in re.split(r"[._-]+", local) if part)
+
+
+def username_for(full_name: Any) -> str:
+    """Directory key for a new user, following the Innovis first.last address convention.
+
+    Office 365 sign-on will later confirm or correct it; the key is never shown.
+    """
+    words = re.findall(r"[A-Za-z]+", str(full_name or ""))
+    if len(words) < 2:
+        raise ValueError("Enter your first name and surname")
+    return normalise_email(".".join(word.lower() for word in words) + "@innovis.com.au")
 
 
 class Directory:

@@ -1,0 +1,15 @@
+id = "concrete-member"
+name = "Concrete Beam and Slab Design"
+short = "Concrete Member"
+standard = "AS 3600:2018 Amdt 1 and 2; AS/NZS 1170.0"
+folder = "17 - CONCRETE MEMBER"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_member.headless"
+defaultSubject = "Concrete beam and slab design"
+calcType = "Concrete beam and slab"
+description = "Strength and serviceability of a reinforced concrete beam (rectangular, T or L) or one-way slab strip to AS 3600:2018 Sections 8 and 9: bending with tension and compression steel, minimum strength, ductility, crack control, shear and torsion with fitments, and deemed-to-comply or calculated deflection. Transcribed from the retained Structural Toolkit CONCRETE MEMBER V5.13 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

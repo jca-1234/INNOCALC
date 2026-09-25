@@ -1,0 +1,15 @@
+id = "concrete-industrial-pavement"
+name = "Concrete Industrial Pavement Design"
+short = "Industrial Pavement"
+standard = "CCAA T48 (2009); C&CA TR550 (Chandler 1982); AS 3600:2018 Amdt 1 and 2"
+folder = "16 - INDUSTRIAL PAVEMENT"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_industrial_pavement.headless"
+defaultSubject = "Industrial pavement design"
+calcType = "Concrete industrial pavement"
+description = "Unreinforced concrete industrial floor or pavement on grade under rack post, forklift wheel and uniform storage loads by the Chandler (C&CA TR550) and CCAA T48 methods, with AS 3600 bearing and punching checks at the rack post and shrinkage reinforcement. Transcribed from the retained Structural Toolkit INDUSTRIAL FLOOR SLABS V5.07 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

@@ -87,7 +87,7 @@ names must not change.
   "standard": "AS 4100:2020",
   "folder": "01 - STEEL MEMBER",   # sub-folder used inside a project's calculation branch
   "status": "available",           # available | planned
-  "version": "V0.05",
+  "version": "v0.0.1",
   "defaultSubject": "Steel member design",
   "calcType": "Steel member",      # the label used when sorting a package
   "description": "...",
@@ -294,7 +294,7 @@ Modules do not import one another. They publish and consume one neutral envelope
 ```python
 {
   "schema": "innocalc.exchange/1",
-  "source": {"module": "steel-member", "version": "V0.05",
+  "source": {"module": "steel-member", "version": "v0.0.1",
              "memberType": "Rafter", "memberNumber": "0001",
              "package": "P01", "level": "L01", "title": "..."},
   "axial":      {"compression_kN": 180.0, "tension_kN": 0.0},

@@ -9,6 +9,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+from .paths import locate
+
 
 def _encode(value: Any) -> Any:
     if isinstance(value, float) and not math.isfinite(value):
@@ -104,7 +106,7 @@ def freeze_attachments(root: Path, result: dict[str, Any]) -> dict[str, Any]:
                 handle.write(content)
         elif target.read_bytes() != content:
             raise ValueError("Saved attachment integrity check failed")
-        attachment.update({"snapshotPath": str(target.relative_to(root)),
+        attachment.update({"snapshotPath": target.relative_to(root).as_posix(),
                            "sha256": digest, "exists": True})
     return frozen
 
@@ -112,7 +114,7 @@ def freeze_attachments(root: Path, result: dict[str, Any]) -> dict[str, Any]:
 def attachment_path(root: Path, attachment: dict[str, Any]) -> Path:
     if not attachment.get("snapshotPath"):
         raise ValueError("This revision has an unfrozen attachment; review and re-save it")
-    path = (root / attachment["snapshotPath"]).resolve()
+    path = locate(attachment["snapshotPath"], root).resolve()
     if not path.is_relative_to(root.resolve()):
         raise ValueError("Saved attachment is outside the calculation library")
     if hashlib.sha256(path.read_bytes()).hexdigest() != attachment.get("sha256"):
@@ -130,11 +132,11 @@ def save_snapshot(root: Path, snapshot: dict[str, Any]) -> tuple[str, str]:
             handle.write(content)
     elif path.read_bytes() != content:
         raise ValueError("The saved revision snapshot is damaged")
-    return str(path.relative_to(root)), digest
+    return path.relative_to(root).as_posix(), digest
 
 
 def load_snapshot(root: Path, revision: dict[str, Any]) -> dict[str, Any]:
-    path = (root / revision["snapshotPath"]).resolve()
+    path = locate(revision["snapshotPath"], root).resolve()
     if not path.is_relative_to(root.resolve()):
         raise ValueError("Revision snapshot is outside the calculation library")
     content = path.read_bytes()

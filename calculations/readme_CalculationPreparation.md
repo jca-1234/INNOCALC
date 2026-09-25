@@ -361,7 +361,7 @@ Read the current [../suite.toml](../suite.toml) instead of assuming this list ne
 | `contractVersion` | `1` for the current module contract. |
 | `inputSchemaVersion` | Version of the saved input-document structure, initially `1`. |
 
-The last four are part of the current scaffold convention and should be retained even where legacy modules omit them. Keep the distribution version and engine version coordinated and explain any deliberate difference. New distributions should use a PEP 440-compatible version, such as `0.1.0.dev0`; do not mechanically copy legacy `V0.06` labels into packaging metadata.
+The last four are part of the current scaffold convention and should be retained even where legacy modules omit them. Versions are `vMajor.Patch.Minor`, starting at `v0.0.1` (see `packages/innocalc_sdk/versioning.py`): **Major** when saved calculations or results may change, **Patch** for a correction or addition that leaves saved calculations valid, **Minor** for presentation or wording only. The engine `VERSION` carries the `v` (`v0.0.1`); `pyproject.toml` carries the PEP 440 spelling of the same numbers (`0.0.1`). The contract check rejects any other descriptor version format.
 
 ### 6.3 What the loader actually checks
 
@@ -758,7 +758,7 @@ Run this only in a development workspace where the ID is not already registered:
 & $Python -m tooling new interface-example --name "Interface Example" --category General --standard "Educational direct-stress model; not a design standard" --filing-folder "EXAMPLE - NOT FOR DESIGN" --owner "Responsible engineer"
 ```
 
-This creates `calculations/general/interface_example/`, package `ic_interface_example`, version `0.1.0.dev0`, and a disabled manifest entry. Retain the generated `pyproject.toml`, `module.toml`, `version.py`, `__init__.py` and `dev.py`. In particular, retain `status = "planned"` in module metadata and `enabled = false` in the suite manifest.
+This creates `calculations/general/interface_example/`, package `ic_interface_example`, version `v0.0.1`, and a disabled manifest entry. Retain the generated `pyproject.toml`, `module.toml`, `version.py`, `__init__.py` and `dev.py`. In particular, retain `status = "planned"` in module metadata and `enabled = false` in the suite manifest.
 
 Replace the following generated files with these **complete teaching implementations**. File markers are included so the examples can be extracted and tested mechanically.
 

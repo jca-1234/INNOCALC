@@ -6,7 +6,7 @@
 
 const $ = id => document.getElementById(id);
 const state = {
-  token: "", user: null, people: [],
+  token: "", user: null, people: [], tabs: null,
   projects: [], project: null,
   modules: [], module: null, schema: null, categories: [], moduleCategory: "", favourites: [],
   inputs: {}, fields: [], checks: {}, cells: [],
@@ -76,6 +76,8 @@ function linkButtons(record) {
 function wireLinks(host) {
   host.querySelectorAll("[data-pdf-path]").forEach(button =>
     button.onclick = () => openFile(button.dataset.pdfPath));
+  host.querySelectorAll("[data-file-path]").forEach(button =>
+    button.onclick = () => openFile(button.dataset.filePath));
   host.querySelectorAll("[data-folder]").forEach(button =>
     button.onclick = () => revealFolder(button.dataset.folder));
 }
@@ -135,25 +137,68 @@ async function loadAuthConfig() {
   state.people = data.people || [];
   $("versionTag").textContent = data.version;
   const sso = data.sso || {};
+  if ((data.auth || {}).mode === "proxy") {
+    /* The reverse proxy has already signed the person in. */
+    try { return await completeSignIn(await api("/api/auth/signin", {})); }
+    catch (error) {
+      $("signInMode").textContent = error.message;
+      $("devSignIn").hidden = true;
+      $("ssoSignIn").hidden = true;
+      return $("signInDialog").showModal();
+    }
+  }
   $("signInMode").textContent = sso.note || "";
   $("devSignIn").hidden = Boolean(sso.enabled);
   $("ssoSignIn").hidden = !sso.enabled;
+  fillSignInUsers();
   $("signInDialog").showModal();
+}
+const LAST_USER = "innocalc.lastUser";
+function fillSignInUsers() {
+  const people = [...state.people].sort((a, b) => a.displayName.localeCompare(b.displayName));
+  $("signInUser").innerHTML = '<option value="">Choose your name&hellip;</option>'
+    + people.map(person => `<option value="${esc(person.email)}">${esc(person.displayName)} (${esc(person.initials)})</option>`).join("");
+  const last = localStorage.getItem(LAST_USER) || "";
+  if (people.some(person => person.email === last)) $("signInUser").value = last;
+  showNewUser(!people.length);
+}
+function showNewUser(on) {
+  $("newUser").hidden = !on;
+  $("pickUser").hidden = on;
+  $("showPickUser").hidden = !state.people.length;
+  $("signInError").textContent = "";
+  (on ? $("signInName") : $("signInUser")).focus();
+}
+async function completeSignIn(data) {
+  state.token = data.token;
+  state.user = data.user;
+  state.people = data.people;
+  state.tabs = data.tabs || Object.keys(VIEWS);
+  Object.entries(NAV).forEach(([view, id]) => { $(id).hidden = !OPEN_VIEWS.includes(view) && !state.tabs.includes(view); });
+  $("readOnlyNotice").hidden = !data.readOnly;
+  if (data.readOnlyReason) {
+    $("readOnlyNotice").textContent = "Read-only: projects are managed on the server";
+    $("readOnlyNotice").title = data.readOnlyReason;
+  }
+  ["saveCalculation", "importPdf", "adoptExisting"].forEach(id => { $(id).disabled = Boolean(data.readOnly); });
+  $("currentUser").textContent = `${data.user.displayName} (${data.user.initials})`;
+  if ($("signInDialog").open) $("signInDialog").close();
+  await Promise.all([loadModules(), loadProjects()]);
+  showView("library");
 }
 async function signIn(event) {
   event.preventDefault();
+  const creating = !$("newUser").hidden;
+  if (!creating && !$("signInUser").value) {
+    $("signInError").textContent = "Choose your name, or create a new username";
+    return;
+  }
   try {
-    const data = await api("/api/auth/signin", {
-      email: $("signInEmail").value, fullName: $("signInName").value,
-      initials: $("signInInitials").value
-    });
-    state.token = data.token;
-    state.user = data.user;
-    state.people = data.people;
-    $("currentUser").textContent = `${data.user.displayName} (${data.user.initials})`;
-    $("signInDialog").close();
-    await Promise.all([loadModules(), loadProjects()]);
-    showView("library");
+    const data = await api("/api/auth/signin", creating
+      ? { newUser: true, fullName: $("signInName").value, initials: $("signInInitials").value }
+      : { userId: $("signInUser").value });
+    localStorage.setItem(LAST_USER, data.user.email);
+    await completeSignIn(data);
   } catch (error) { $("signInError").textContent = error.message; }
 }
 async function startSso() {
@@ -245,7 +290,7 @@ function renderProjectList() {
     ? `<table class="data"><thead><tr><th>Project</th><th>Folder</th><th>Role</th><th>Last opened</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
     : '<p class="empty-state">No projects yet. Add one below.</p>';
   $("projectList").querySelectorAll("[data-open]").forEach(button =>
-    button.onclick = () => openProject(button.dataset.open).then(() => $("projectsDialog").close()));
+    button.onclick = () => openProject(button.dataset.open).then(opened => { if (opened) showView("library"); }));
   $("projectList").querySelectorAll("[data-relink]").forEach(button =>
     button.onclick = () => relinkProject(button.dataset.relink));
   $("projectList").querySelectorAll("[data-archive]").forEach(button =>
@@ -270,7 +315,7 @@ function showDiscovery(discovery) {
   $("discoveryStatus").textContent = parts.join(" | ");
 }
 async function openProject(projectId) {
-  if (!await guard()) return;
+  if (!await guard()) return false;
   try {
     const data = await api("/api/projects/open", { projectId });
     state.project = data.project;
@@ -286,7 +331,8 @@ async function openProject(projectId) {
     renderTree();
     applyProjectMeta();
     toast(`Opened ${projectLabel(data.project)}`);
-  } catch (error) { toast(error.message, true); }
+    return true;
+  } catch (error) { toast(error.message, true); return false; }
 }
 function applyProjectMeta() {
   if (!state.meta) return;
@@ -381,10 +427,7 @@ async function addProject(path, openAfter) {
     renderProjectSelect();
     renderProjectList();
     toast(`Added ${projectLabel(data.project)}`);
-    if (openAfter !== false) {
-      await openProject(data.project.id);
-      $("projectsDialog").close();
-    }
+    if (openAfter !== false && await openProject(data.project.id)) showView("library");
   } catch (error) { $("projectsError").textContent = error.message; }
 }
 async function pickFolder(target, mode) {
@@ -1105,7 +1148,20 @@ function renderLibrary(keepFilters) {
         <button data-open-calc="${esc(record.id)}">Open</button>
         <button data-link="${esc(record.id)}" title="Send these values into another calculation">Link</button>
         <button data-remove="${esc(record.id)}" class="danger" title="Remove from the library index">Remove</button>
-      </td></tr>`;
+      </td></tr>` + (record.history || []).map(rev => `<tr class="superseded">
+      <td>${esc(record.package)}</td><td>${esc(record.level)}</td>
+      <td>${esc(moduleName(record.module))}</td>
+      <td>${esc(record.memberType)}</td>
+      <td>${esc(record.memberNumber)}</td>
+      <td>${esc(record.title)}</td>
+      <td><i>Superseded</i></td>
+      <td class="nowrap">${statusPill(rev.status)} <span class="util">${percent(rev.worstUtil)}</span></td>
+      <td>${esc(rev.criticalCheck || "")}</td>
+      <td></td>
+      <td class="nowrap">rev ${esc(rev.rev)} ${esc(stamp(rev.savedAt))} ${esc(rev.initials || "")}</td>
+      <td></td>
+      <td class="row-actions">${linkButtons(rev)}${rev.htmlPath
+        ? `<button data-file-path="${esc(rev.htmlPath)}" title="View this superseded revision">View</button>` : ""}</td></tr>`).join("");
   }).join("");
   $("libraryTable").innerHTML = rows
     ? `<table class="data"><thead><tr><th>Package</th><th>Level</th><th>Module</th><th>Type</th>
@@ -1496,18 +1552,143 @@ async function showQaStatus() {
 /* ------------------------------------------------------------------ views */
 const VIEWS = {
   library: "libraryView", calculation: "calculationView",
-  package: "packageView", qa: "qaView"
+  package: "packageView", qa: "qaView", projects: "projectsView", feedback: "feedbackView"
 };
+const NAV = {
+  library: "navLibrary", calculation: "navCalculation",
+  package: "navPackage", qa: "navQa", projects: "projectsButton", feedback: "feedbackButton"
+};
+/* Pages every signed-in person may open, whatever their tab access. */
+const OPEN_VIEWS = ["projects", "feedback"];
 async function showView(view) {
+  /* A tab withheld from this role is never activated; fall back to the first permitted one. */
+  if (state.tabs && !OPEN_VIEWS.includes(view) && !state.tabs.includes(view)) view = state.tabs[0];
+  if (!view) return;
   if (state.view === "calculation" && view !== "calculation" && !await guard()) return;
   state.view = view;
+  if (!OPEN_VIEWS.includes(view)) state.workView = view;
   Object.entries(VIEWS).forEach(([key, id]) => { $(id).hidden = key !== view; });
-  ["navLibrary", "navCalculation", "navPackage", "navQa"].forEach((id, index) =>
-    $(id).classList.toggle("active", ["library", "calculation", "package", "qa"][index] === view));
+  Object.entries(NAV).forEach(([key, id]) => $(id).classList.toggle("active", key === view));
   $("saveCalculation").hidden = view !== "calculation";
   if (view === "library") refreshLibrary();
   if (view === "package") refreshPackage();
   if (view === "qa") refreshQa();
+  if (view === "projects") loadProjects().catch(error => toast(error.message, true));
+  if (view === "feedback") refreshFeedback();
+}
+
+/* ------------------------------------------------------------------ feedback */
+async function refreshFeedback() {
+  try {
+    const data = await get("/api/feedback", {
+      kind: $("feedbackKind").value, status: $("feedbackStatus").value,
+      search: $("feedbackSearch").value.trim()
+    });
+    state.feedback = data;
+    if ($("feedbackStatus").options.length === 1) {
+      $("feedbackStatus").innerHTML += data.statuses.map(item =>
+        `<option value="${esc(item)}">${esc(item)}</option>`).join("");
+    }
+    $("feedbackExport").hidden = !data.admin;
+    renderFeedback();
+  } catch (error) { toast(error.message, true); }
+}
+function renderFeedback() {
+  const data = state.feedback;
+  const me = state.user ? state.user.email : "";
+  const options = (list, current) => list.map(item =>
+    `<option value="${esc(item)}"${item === current ? " selected" : ""}>${esc(item)}</option>`).join("");
+  const rows = data.reports.map(report => {
+    const context = Object.entries(report.context || {}).map(([key, value]) => `${key}: ${value}`).join(" | ");
+    const triage = data.admin ? `<div class="feedback-triage">
+        <label>Status<select data-fb-status="${esc(report.id)}">${options(data.statuses, report.status)}</select></label>
+        <label>Priority<select data-fb-priority="${esc(report.id)}">${options(data.priorities, report.priority)}</select></label>
+        <label class="grow-3">Response to the reporter<textarea data-fb-response="${esc(report.id)}" rows="2">${esc(report.response)}</textarea></label>
+        <button data-fb-save="${esc(report.id)}" class="primary" type="button">Save</button></div>`
+      : report.response ? `<p><b>Response:</b> ${esc(report.response)}</p>` : "";
+    return `<tr><td class="nowrap"><b>${esc(report.reference)}</b></td>
+      <td class="nowrap"><span class="pill ${report.kind === "bug" ? "fail" : "noted"}">${esc(report.kind)}</span></td>
+      <td><details><summary>${esc(report.title)}</summary>
+        <p>${esc(report.description)}</p>
+        ${report.steps ? `<p><b>Steps:</b><br>${esc(report.steps).replace(/\n/g, "<br>")}</p>` : ""}
+        ${report.expected ? `<p><b>Expected:</b> ${esc(report.expected)}</p>` : ""}
+        ${context ? `<p class="muted">${esc(context)}</p>` : ""}
+        ${triage}</details></td>
+      <td class="nowrap">${esc(report.status)}</td>
+      <td class="nowrap">${esc(report.priority)}</td>
+      <td class="nowrap">${esc(report.reporterName)}</td>
+      <td class="nowrap">${esc(stamp(report.createdAt))}</td>
+      <td class="nowrap"><button data-fb-vote="${esc(report.id)}" type="button"${(report.votes || []).includes(me) ? ' class="active"' : ""}>Me too (${(report.votes || []).length})</button></td></tr>`;
+  }).join("");
+  $("feedbackTable").innerHTML = rows
+    ? `<table class="data"><thead><tr><th>Ref.</th><th>Type</th><th>Title</th><th>Status</th><th>Priority</th>
+       <th>Raised by</th><th>Raised</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    : '<p class="empty-state">No reports match. Use the buttons above to raise one.</p>';
+  $("feedbackTable").querySelectorAll("[data-fb-vote]").forEach(button =>
+    button.onclick = () => feedbackCall("/api/feedback/vote", { id: button.dataset.fbVote }));
+  $("feedbackTable").querySelectorAll("[data-fb-save]").forEach(button => {
+    const id = button.dataset.fbSave;
+    const host = $("feedbackTable");
+    button.onclick = () => feedbackCall("/api/feedback/update", {
+      id, status: host.querySelector(`[data-fb-status="${id}"]`).value,
+      priority: host.querySelector(`[data-fb-priority="${id}"]`).value,
+      response: host.querySelector(`[data-fb-response="${id}"]`).value
+    }, "Report updated");
+  });
+}
+async function feedbackCall(path, payload, message) {
+  try {
+    await api(path, payload);
+    if (message) toast(message);
+    refreshFeedback();
+  } catch (error) { toast(error.message, true); }
+}
+function feedbackContext() {
+  return {
+    view: state.workView || "",
+    module: state.workView === "calculation" && state.module ? state.module.id : "",
+    moduleVersion: state.workView === "calculation" && state.module ? state.module.version || "" : "",
+    project: state.project ? state.project.code || projectLabel(state.project) : "",
+    calculation: state.workView === "calculation" ? state.calculationId : "",
+    browser: navigator.userAgent
+  };
+}
+function openFeedbackDialog(kind) {
+  state.feedbackKind = kind;
+  const bug = kind === "bug";
+  $("feedbackDialogTitle").textContent = bug ? "Report a bug" : "Suggest an improvement";
+  $("fbDescriptionLabel").firstChild.textContent = bug ? "What happened?" : "What would make InnoCalc better?";
+  $("fbBugFields").hidden = !bug;
+  ["fbTitle", "fbDescription", "fbSteps", "fbExpected"].forEach(id => { $(id).value = ""; });
+  $("fbPriority").value = "medium";
+  const context = feedbackContext();
+  $("fbContext").textContent = "Sent with your report: " + [
+    context.view && `page ${context.view}`, context.module && `module ${context.module}`,
+    context.project && `project ${context.project}`, "InnoCalc version"].filter(Boolean).join(", ") + ".";
+  $("feedbackError").textContent = "";
+  $("feedbackDialog").showModal();
+}
+async function sendFeedback() {
+  try {
+    const data = await api("/api/feedback/submit", {
+      kind: state.feedbackKind, title: $("fbTitle").value, description: $("fbDescription").value,
+      steps: $("fbSteps").value, expected: $("fbExpected").value, priority: $("fbPriority").value,
+      context: feedbackContext()
+    });
+    $("feedbackDialog").close();
+    toast(`Thank you - logged as ${data.report.reference}`);
+    refreshFeedback();
+  } catch (error) { $("feedbackError").textContent = error.message; }
+}
+async function exportFeedback() {
+  try {
+    const data = await get("/api/feedback/export");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([data.csv], { type: "text/csv" }));
+    link.download = `InnoCalc feedback ${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (error) { toast(error.message, true); }
 }
 function showVersions() {
   get("/api/versions").then(data => {
@@ -1524,7 +1705,7 @@ function showPeople() {
   const project = state.project;
   $("peopleList").innerHTML = `<table class="data"><thead><tr><th>Person</th><th>Designer</th><th>Verifier</th></tr></thead>
     <tbody>${state.people.map(person => `<tr>
-      <td>${esc(person.displayName)} <span class="muted">${esc(person.email)}</span></td>
+      <td>${esc(person.displayName)} <span class="muted">${esc(person.initials)}</span></td>
       <td><input type="checkbox" data-designer="${esc(person.email)}"${(project.designers || []).includes(person.email) ? " checked" : ""}></td>
       <td><input type="checkbox" data-verifier="${esc(person.email)}"${(project.verifiers || []).includes(person.email) ? " checked" : ""}></td>
       </tr>`).join("")}</tbody></table>`;
@@ -1534,12 +1715,14 @@ function showPeople() {
 async function savePeople() {
   const designers = [...document.querySelectorAll("[data-designer]:checked")].map(box => box.dataset.designer);
   const verifiers = [...document.querySelectorAll("[data-verifier]:checked")].map(box => box.dataset.verifier);
-  const extra = $("newPersonEmail").value.trim().toLowerCase();
-  if (extra) ($("newPersonRole").value === "verifier" ? verifiers : designers).push(extra);
+  const extra = $("newPersonName").value.trim();
+  const newPeople = extra ? [{ fullName: extra, role: $("newPersonRole").value }] : [];
   try {
-    const data = await api("/api/projects/people", { projectId: state.project.id, designers, verifiers });
+    const data = await api("/api/projects/people", { projectId: state.project.id, designers, verifiers, newPeople });
     state.project = data.project;
     state.projects = data.projects;
+    state.people = data.people || state.people;
+    $("newPersonName").value = "";
     $("peopleDialog").close();
     toast("Project team updated");
   } catch (error) { $("peopleError").textContent = error.message; }
@@ -1581,19 +1764,16 @@ async function importPdfCalculation() {
 function wire() {
   $("signInForm").addEventListener("submit", signIn);
   $("ssoStart").onclick = startSso;
-  $("signInEmail").oninput = () => {
-    if (!$("signInName").value) {
-      const local = $("signInEmail").value.split("@")[0] || "";
-      $("signInName").value = local.split(/[._-]/).filter(Boolean)
-        .map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
-    }
-  };
+  $("showNewUser").onclick = () => showNewUser(true);
+  $("showPickUser").onclick = () => showNewUser(false);
 
   $("projectSelect").onchange = () => {
     const id = $("projectSelect").value;
-    if (id) openProject(id); else renderProjectSelect();
+    if (id) openProject(id).then(opened => { if (opened && state.view === "projects") showView("library"); });
+    else renderProjectSelect();
   };
-  $("projectsButton").onclick = () => { loadProjects(); $("projectsDialog").showModal(); };
+  $("projectsButton").onclick = () => showView("projects");
+  $("projectsBack").onclick = () => showView("library");
   $("findButton").onclick = findProject;
   $("findCode").onkeydown = event => { if (event.key === "Enter") { event.preventDefault(); findProject(); } };
   $("rescanButton").onclick = async () => {
@@ -1612,6 +1792,14 @@ function wire() {
   $("navPackage").onclick = () => showView("package");
   $("navQa").onclick = () => showView("qa");
   $("versionsButton").onclick = showVersions;
+  $("feedbackButton").onclick = () => showView("feedback");
+  $("feedbackBug").onclick = () => openFeedbackDialog("bug");
+  $("feedbackIdea").onclick = () => openFeedbackDialog("improvement");
+  $("feedbackSend").onclick = sendFeedback;
+  $("feedbackRefresh").onclick = refreshFeedback;
+  $("feedbackExport").onclick = exportFeedback;
+  ["feedbackKind", "feedbackStatus"].forEach(id => $(id).addEventListener("change", refreshFeedback));
+  $("feedbackSearch").addEventListener("input", refreshFeedback);
   $("saveCalculation").onclick = () => saveCalculation().catch(() => {});
 
   $("newCalculation").onclick = openModuleDialog;
@@ -1645,10 +1833,8 @@ function wire() {
     $("libraryShowSuperseded").checked = false;
     refreshLibrary();
   };
-  ["librarySearch", "libraryShowSuperseded"].forEach(id => {
-    $(id).addEventListener("input", refreshLibrary);
-    $(id).addEventListener("change", refreshLibrary);
-  });
+  $("librarySearch").addEventListener("input", refreshLibrary);
+  $("libraryShowSuperseded").addEventListener("change", refreshLibrary);
   $("refreshTree").onclick = refreshLibrary;
 
   ["pkgPackage", "pkgLevel", "pkgMemberType", "pkgCalcType", "pkgSort1", "pkgSort2", "pkgSort3",

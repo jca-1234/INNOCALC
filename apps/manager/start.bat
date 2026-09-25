@@ -1,12 +1,13 @@
 @echo off
 rem ======================================================================
-rem  InnoCalc Manager - Innovis calculation management
+rem  InnoCalc - Innovis calculation management
 rem  Starts the local service and opens http://127.0.0.1:8125/
 rem
 rem  Optional settings: remove the "rem" and edit as needed.
 rem ======================================================================
 rem set "ICM_ROOT=J:\Active Projects"
 rem set "ICM_PORT=8125"
+rem Every other setting is described in ..\..\.env.example.
 
 setlocal EnableExtensions
 for %%I in ("%~dp0.") do set "SUITE=%%~fI"

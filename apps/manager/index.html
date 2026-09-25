@@ -3,26 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>InnoCalc Manager</title>
+<title>InnoCalc &mdash; Calculation Management</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="/calcpad-theme.css">
 </head>
-<body>
+<body class="innocalc">
 
 <!-- ------------------------------------------------------------------ sign in -->
 <dialog id="signInDialog">
   <form id="signInForm" method="dialog">
-    <h1>InnoCalc Manager</h1>
+    <div class="app-brand sign-in-brand"><span class="app-brand-mark">IC</span><h1>InnoCalc</h1></div>
+    <p class="muted">Calculation Management</p>
     <p class="muted" id="signInMode">Checking sign-in method&hellip;</p>
     <section id="devSignIn">
-      <label>Innovis email<input id="signInEmail" type="email" placeholder="name@innovis.com.au" autocomplete="email" required></label>
-      <div class="two-col">
-        <label>Full name<input id="signInName" autocomplete="name" placeholder="Jarvis Anderson"></label>
-        <label>Initials<input id="signInInitials" maxlength="4" placeholder="JA"></label>
+      <div id="pickUser">
+        <label>Who are you?<select id="signInUser"></select></label>
+        <p class="muted">Not in the list? <button id="showNewUser" type="button">Create a new username</button></p>
       </div>
-      <p class="notice">This release uses no passwords. Office 365 single sign-on is configured but not activated.</p>
+      <div id="newUser" hidden>
+        <div class="two-col">
+          <label>Full name<input id="signInName" autocomplete="name" placeholder="First name and surname"></label>
+          <label>Initials<input id="signInInitials" maxlength="4" placeholder="JA"></label>
+        </div>
+        <p class="muted"><button id="showPickUser" type="button">Back to the list of names</button></p>
+      </div>
+      <p class="notice">This release uses no passwords or email addresses. Office 365 single sign-on will replace this once InnoCalc is on the server.</p>
       <p id="signInError" class="error"></p>
-      <div class="actions"><button class="primary" type="submit">Continue</button></div>
+      <div class="actions"><button id="signInContinue" class="primary" type="submit">Continue</button></div>
     </section>
     <section id="ssoSignIn" hidden>
       <p>Sign in with your Innovis Office 365 account.</p>
@@ -34,11 +42,10 @@
 
 <!-- ------------------------------------------------------------------ toolbar -->
 <header class="toolbar">
-  <strong>INNOVIS <span id="versionTag">V0.01</span></strong>
-  <span class="muted">InnoCalc Manager</span>
+  <span class="app-brand"><span class="app-brand-mark">IC</span><span>InnoCalc</span><span id="versionTag" class="version-tag">v0.0.1</span></span>
   <label class="sr-only" for="projectSelect">Project</label>
   <select id="projectSelect" title="Your projects"><option value="">No project open</option></select>
-  <button id="projectsButton" type="button" title="Manage projects">Projects&hellip;</button>
+  <button id="projectsButton" type="button" title="Find, add and manage projects">Projects</button>
   <nav>
     <button id="navLibrary" class="active">Calculation Index</button>
     <button id="navCalculation">Calculation</button>
@@ -47,10 +54,12 @@
   </nav>
   <span id="moduleBadge"></span>
   <span class="spacer"></span>
+  <span id="readOnlyNotice" class="read-only-notice" hidden title="Nothing is written to the projects drive from this instance">Read-only preview: save in production</span>
   <span id="saveState" class="save-state"></span>
   <span class="dirty-dot" title="Unsaved changes"></span>
   <button id="saveCalculation" class="primary calc-action" hidden>SAVE</button>
   <button id="versionsButton" type="button">Versions</button>
+  <button id="feedbackButton" type="button" title="Report a bug or suggest an improvement">Feedback</button>
   <span id="currentUser"></span>
 </header>
 
@@ -170,10 +179,12 @@
   </div>
 </section>
 
-<!-- ------------------------------------------------------------------ dialogs -->
-<dialog id="projectsDialog"><div class="dialog-body">
-  <button class="close" data-close type="button">&times;</button>
-  <h1>Projects</h1>
+<!-- ----------------------------------------------------------------- projects -->
+<section id="projectsView" class="view" hidden>
+  <div class="view-head"><h1>Projects</h1>
+    <div class="row-actions"><button id="projectsBack" type="button">Back to Calculation Index</button></div>
+  </div>
+  <div class="card">
   <h2>Open a project</h2>
   <div class="filters">
     <label class="grow-2">Project number or name<input id="findCode" type="search" placeholder="J3657, or part of the client or project name" maxlength="80"></label>
@@ -182,7 +193,9 @@
     <span id="discoveryStatus" class="muted"></span>
   </div>
   <div id="findResults"></div>
-  <div class="scroll-box" id="projectList"></div>
+  </div>
+  <div class="card"><h2>Your projects</h2><div id="projectList"></div></div>
+  <div class="card">
   <h2>Add or create a project</h2>
   <p class="muted">Type the project number and the folder, client reference and project name are
   filled in for you. The project folder and the Innovis sub-folders are created automatically
@@ -194,7 +207,51 @@
     <label class="wide">Project name<input id="newProjectName"></label>
   </div>
   <p id="projectsError" class="error"></p>
-  <div class="actions"><button id="addProject" class="primary" type="button">Add project</button><button data-close type="button">Close</button></div>
+  <div class="actions"><button id="addProject" class="primary" type="button">Add project</button></div>
+  </div>
+</section>
+
+<!-- ----------------------------------------------------------------- feedback -->
+<section id="feedbackView" class="view" hidden>
+  <div class="view-head"><h1>Feedback</h1>
+    <div class="row-actions">
+      <button id="feedbackBug" class="primary" type="button">Report a bug</button>
+      <button id="feedbackIdea" class="primary" type="button">Suggest an improvement</button>
+      <button id="feedbackExport" type="button" hidden>Export CSV</button>
+      <button id="feedbackRefresh" type="button">Refresh</button>
+    </div>
+  </div>
+  <div class="card">
+    <p class="muted">Something broken, confusing or missing? Tell us here. Check the list first &ndash;
+    if someone has already raised it, press <b>Me too</b> so we know how many people it affects.</p>
+    <div class="filters">
+      <label>Search<input id="feedbackSearch" type="search" placeholder="title, reference, description&hellip;"></label>
+      <label>Type<select id="feedbackKind"><option value="">All</option><option value="bug">Bugs</option><option value="improvement">Improvements</option></select></label>
+      <label>Status<select id="feedbackStatus"><option value="">All</option></select></label>
+    </div>
+  </div>
+  <div class="card"><div id="feedbackTable"><p class="empty-state">No reports yet.</p></div></div>
+</section>
+
+<!-- ------------------------------------------------------------------ dialogs -->
+<dialog id="feedbackDialog"><div class="dialog-body">
+  <button class="close" data-close type="button">&times;</button>
+  <h1 id="feedbackDialogTitle">Report a bug</h1>
+  <label>Short title<input id="fbTitle" maxlength="140" placeholder="e.g. Show superseded does nothing"></label>
+  <label id="fbDescriptionLabel">What happened?<textarea id="fbDescription" rows="4" maxlength="5000"></textarea></label>
+  <div id="fbBugFields">
+    <label>Steps to make it happen again<textarea id="fbSteps" rows="3" maxlength="3000" placeholder="1. Open a project&#10;2. Tick Show superseded&#10;3. ..."></textarea></label>
+    <label>What did you expect to happen?<textarea id="fbExpected" rows="2" maxlength="2000"></textarea></label>
+  </div>
+  <label>How much does it matter?<select id="fbPriority">
+    <option value="low">Low - a small annoyance</option>
+    <option value="medium" selected>Medium - slows me down</option>
+    <option value="high">High - stops me working</option>
+    <option value="critical">Critical - wrong engineering result or lost work</option>
+  </select></label>
+  <p class="muted" id="fbContext"></p>
+  <p id="feedbackError" class="error"></p>
+  <div class="actions"><button id="feedbackSend" class="primary" type="button">Send</button><button data-close type="button">Cancel</button></div>
 </div></dialog>
 
 <dialog id="moduleDialog"><div class="dialog-body">
@@ -235,7 +292,7 @@
   <p class="muted">Designers may edit calculations. Verifiers may endorse verification packages.</p>
   <div class="scroll-box" id="peopleList"></div>
   <h3>Add someone</h3>
-  <div class="two-col"><label>Innovis email<input id="newPersonEmail" type="email" placeholder="name@innovis.com.au"></label>
+  <div class="two-col"><label>Full name<input id="newPersonName" placeholder="First name and surname"></label>
   <label>Role<select id="newPersonRole"><option value="designer">Designer</option><option value="verifier">Verifier</option></select></label></div>
   <p id="peopleError" class="error"></p>
   <div class="actions"><button id="savePeople" class="primary" type="button">Save team</button><button data-close type="button">Cancel</button></div>

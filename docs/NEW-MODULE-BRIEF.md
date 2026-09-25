@@ -44,7 +44,7 @@ calculations/<discipline>/<id>/
   src/<pkg>/
     __init__.py       no fixed directory-depth bootstrap
     module.toml       identity, standard, maintainer and planned/available status
-    version.py        VERSION = "V0.01"
+    version.py        VERSION = "v0.0.1"
     headless.py       the contract: the seven required functions and DESCRIPTOR
     engine.py         the calculation. Pure functions, SI internally, no presentation.
     report.py         calcpad blocks only. No arithmetic beyond formatting.

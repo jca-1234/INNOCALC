@@ -9,6 +9,7 @@ PDF links, which is what makes a collated package's contents page work.
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -20,12 +21,20 @@ BROWSER_CANDIDATES = [
     Path(os.environ.get("PROGRAMFILES", "")) / "Microsoft/Edge/Application/msedge.exe",
     Path(os.environ.get("PROGRAMFILES", "")) / "Google/Chrome/Application/chrome.exe",
     Path(os.environ.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
+    Path("/usr/bin/chromium"),
+    Path("/usr/bin/chromium-browser"),
+    Path("/usr/bin/google-chrome"),
 ]
 # Headless Chromium is not safe to run concurrently against one profile.
 _PRINT_LOCK = threading.Lock()
 
 
 def browser_path() -> Path:
+    configured = os.environ.get("INNOCALC_BROWSER", "").strip()
+    if configured:
+        if not Path(configured).is_file():
+            raise RuntimeError(f"INNOCALC_BROWSER does not exist: {configured}")
+        return Path(configured)
     browser = next((path for path in BROWSER_CANDIDATES if path.is_file()), None)
     if not browser:
         raise RuntimeError("Microsoft Edge or Google Chrome is required for PDF export")
@@ -43,6 +52,7 @@ def export_pdf(html_path: str | Path, pdf_path: str | Path, *, open_after: bool 
                "--no-pdf-header-footer", "--disable-extensions",
                "--disable-background-networking", "--no-first-run",
                f"--user-data-dir={profile}",
+               *shlex.split(os.environ.get("INNOCALC_BROWSER_ARGS", "")),
                "--run-all-compositor-stages-before-draw", "--virtual-time-budget=20000",
                f"--print-to-pdf={pdf_path}", html_path.as_uri()]
     try:

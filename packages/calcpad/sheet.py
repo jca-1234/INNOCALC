@@ -77,6 +77,29 @@ def grid(title: str, headers: list[str], rows: Iterable[Iterable[str]], note: st
             f"<tbody>{body}</tbody></table>")
 
 
+def matrix(title: str, rows: Iterable[tuple[str, str, Any, str]]) -> str:
+    """Design-input register: (label, variable, value, unit) per row, as the column module prints."""
+    body = "".join(f"<tr><td>{esc(label)}</td><td><code>{esc(key)}</code></td>"
+                   f'<td class="num">{esc(value)}</td><td>{esc(unit)}</td></tr>'
+                   for label, key, value, unit in rows)
+    if not body:
+        return ""
+    return (f'<h2>{esc(title)}</h2><table class="calc matrix">'
+            '<colgroup><col class="item-col"><col class="basis-col"><col class="result-col">'
+            '<col class="reference-col"></colgroup><thead><tr><th>Input</th><th>Variable</th>'
+            f"<th>Value</th><th>Unit</th></tr></thead><tbody>{body}</tbody></table>")
+
+
+def figure(title: str, svg: str, caption: str = "", *, weight: int = 20) -> str:
+    """Centred inline drawing; ``weight`` declares its depth in table rows."""
+    if not svg:
+        return ""
+    note = f'<p class="dct-caption">{esc(caption)}</p>' if caption else ""
+    return (f"<!--weight:{weight}--><h2>{esc(title)}</h2>{note}"
+            '<div style="display:flex;justify-content:center;align-items:flex-start;gap:4mm">'
+            f"{svg}</div>")
+
+
 def prose(title: str, body_html: str, *, weight: int = 12) -> str:
     """Narrative block; ``weight`` declares how many table rows of depth it uses."""
     heading = f"<h2>{esc(title)}</h2>" if title else ""

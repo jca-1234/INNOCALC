@@ -1,0 +1,15 @@
+id = "concrete-punching-shear"
+name = "Concrete Punching Shear Design"
+short = "Punching Shear"
+standard = "AS 3600:2018 Amdt 1 and 2"
+folder = "13 - CONCRETE PUNCHING SHEAR"
+category = "Concrete"
+maintainer = "Responsible engineer (unassigned)"
+status = "planned"
+entry = "ic_concrete_punching_shear.headless"
+defaultSubject = "Punching shear design"
+calcType = "Concrete punching shear"
+description = "AS 3600 Section 9.3 punching shear strength of a slab at a rectangular or circular column in an internal, edge or corner position, with moment transfer, torsion-strip or spandrel closed fitments, shear heads, the Cl 6.10.4.5 minimum transferred moment and integrity reinforcement. Transcribed from the retained Structural Toolkit PUNCHING SHEAR V5.06 workbook; not yet independently reviewed."
+contractVersion = 1
+inputSchemaVersion = 1
+capabilities = ["compute", "render", "validate"]

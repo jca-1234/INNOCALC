@@ -18,6 +18,7 @@ Layout inside a project folder::
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import threading
@@ -29,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from .locking import project_lock
+from .paths import locate, portable
 from .snapshots import freeze_attachments, recovery_data, save_snapshot, snapshot_json
 
 CALCULATION_ROOT = Path("09-Doc_WRK") / "01-CAL" / "10-IN_TOOL"
@@ -40,6 +42,11 @@ IMPORTED = "imported-pdf"
 IMPORTED_FOLDER = "80 - IMPORTED"
 # Kept so calculations filed by the standalone steel tool are still found.
 LEGACY_ROOTS = [Path("09-Doc_WRK") / "01-CAL" / "10 - STEEL DESIGN TOOL"]
+
+
+# Fields holding a path relative to the project folder, in the issue register and QA packages.
+ISSUE_PATHS = ("pdfPath", "drawingsPath", "folder")
+QA_PATHS = ("folder", "calculationPdf", "drawingsPdf")
 
 
 def safe_name(value: Any) -> str:
@@ -126,6 +133,47 @@ class Library:
         self.data.setdefault("register", [])
         self.data.setdefault("qaPackages", [])
         self.data.setdefault("issues", [])
+        self._make_portable()
+
+    def _make_portable(self) -> None:
+        """Rewrite paths from older releases in the portable form; persisted on the next write."""
+        for record in self.data["calculations"]:
+            for revision in record.get("revisions", []):
+                for key in ("relativePath", "snapshotPath"):
+                    if revision.get(key):
+                        revision[key] = portable(revision[key], self.root)
+        for issue in self.data["issues"]:
+            for key in ISSUE_PATHS:
+                if issue.get(key):
+                    issue[key] = portable(issue[key], self.project_folder)
+        for package in self.data["qaPackages"]:
+            for key in QA_PATHS:
+                if package.get(key):
+                    package[key] = portable(package[key], self.project_folder)
+            for holder, key in ((package.get("endorsed"), "registerFile"),
+                                (package.get("drawingSet"), "path"),
+                                (package.get("draftEmail"), "path")):
+                if isinstance(holder, dict) and holder.get(key):
+                    holder[key] = portable(holder[key], self.project_folder)
+
+    def locate(self, value: Any) -> Path:
+        """A path stored relative to the project folder, as a real path on this machine."""
+        return locate(value, self.project_folder)
+
+    def file_of(self, revision: dict[str, Any]) -> Path:
+        return locate(revision.get("relativePath", ""), self.root)
+
+    def public_issue(self, issue: dict[str, Any]) -> dict[str, Any]:
+        return {**issue, **{key: str(self.locate(issue[key])) for key in ISSUE_PATHS
+                            if issue.get(key)}}
+
+    @transaction_method
+    def rewrite_portable(self) -> bool:
+        """Persist the portable form now rather than at the next save. True if it changed."""
+        if self._baseline is None or json.loads(self._baseline) == self.data:
+            return False
+        self.write()
+        return True
 
     def write(self) -> None:
         if self._transaction_depth:
@@ -207,8 +255,19 @@ class Library:
             if not revisions and not show_superseded:
                 continue
             latest = revisions[-1] if revisions else {}
+            # Each row shows only its latest revision, so superseded ones are listed separately.
+            history = []
+            if show_superseded:
+                for revision in reversed(revisions[:-1]):
+                    if not revision.get("superseded"):
+                        continue
+                    html = self.file_of(revision)
+                    pdf = html.with_suffix(".pdf")
+                    history.append({**revision, "folder": str(html.parent),
+                                    "htmlPath": str(html) if html.is_file() else "",
+                                    "pdfPath": str(pdf) if pdf.is_file() else ""})
             rows.append({**{key: value for key, value in record.items() if key != "inputs"},
-                         "revisions": revisions,
+                         "revisions": revisions, "history": history,
                          "superseded": bool(latest.get("superseded")),
                          "folder": str(self.folder_of(record)),
                          "pdfPath": str(self.pdf_of(record) or ""),
@@ -228,21 +287,21 @@ class Library:
                 "memberTypes": sorted({str(item.get("memberType") or "") for item in
                                        self.data["calculations"] if item.get("memberType")},
                                       key=str.casefold),
-                "issues": list(reversed(self.data.get("issues", []))),
+                "issues": [self.public_issue(item) for item in reversed(self.data.get("issues", []))],
                 "calculations": rows, "total": len(self.data["calculations"])}
 
     def folder_of(self, record: dict[str, Any]) -> Path:
         """The folder the calculation's files are filed in."""
         revisions = record.get("revisions") or []
         if revisions:
-            return (self.root / revisions[-1].get("relativePath", "")).parent
+            return self.file_of(revisions[-1]).parent
         return self.root / safe_name(record.get("moduleFolder", "")) / record.get("package", "")
 
     def pdf_of(self, record: dict[str, Any]) -> Path | None:
         revisions = record.get("revisions") or []
         if not revisions:
             return None
-        target = (self.root / revisions[-1].get("relativePath", "")).with_suffix(".pdf")
+        target = self.file_of(revisions[-1]).with_suffix(".pdf")
         return target if target.is_file() else None
 
     @staticmethod
@@ -321,7 +380,7 @@ class Library:
                 "snapshotPath": snapshot_path, "snapshotSha256": snapshot_hash,
                 "moduleVersion": (descriptor or {}).get("version", "unknown"),
                 "inputSchemaVersion": (descriptor or {}).get("inputSchemaVersion", 1),
-                    "relativePath": str(html_path.relative_to(self.root)),
+                    "relativePath": html_path.relative_to(self.root).as_posix(),
                     "savedAt": saved_at.replace(second=0, microsecond=0).isoformat(timespec="minutes"),
                     "initials": clean_initials(initials), "superseded": False,
                     "worstUtil": summary.get("worstUtil", 0.0),
@@ -353,13 +412,13 @@ class Library:
             if revision.get("superseded"):
                 continue
             revision["superseded"] = True
-            source = self.root / revision["relativePath"]
+            source = self.file_of(revision)
             if not source.exists():
                 continue
             target.mkdir(parents=True, exist_ok=True)
             destination = target / source.name
             shutil.move(str(source), str(destination))
-            revision["relativePath"] = str(destination.relative_to(self.root))
+            revision["relativePath"] = destination.relative_to(self.root).as_posix()
             source_pdf = source.with_suffix(".pdf")
             if source_pdf.exists():
                 shutil.move(str(source_pdf), str(destination.with_suffix(".pdf")))
@@ -434,7 +493,7 @@ class Library:
             self.data["calculations"].append(record)
         self._supersede(record, folder)
         revision = {"rev": len(record["revisions"]) + 1, "filename": target.name,
-                    "relativePath": str(target.relative_to(self.root)),
+                    "relativePath": target.relative_to(self.root).as_posix(),
                     "savedAt": saved_at.replace(second=0, microsecond=0).isoformat(timespec="minutes"),
                     "initials": clean_initials(initials), "superseded": False,
                     "worstUtil": 0.0, "criticalCheck": "", "status": ""}
@@ -460,15 +519,17 @@ class Library:
         """Add an exported package to the project's issue register."""
         issue = {"id": uuid.uuid4().hex[:10],
                  "issuedAt": datetime.now().isoformat(timespec="minutes"),
-                 "date": datetime.now().strftime("%d/%m/%Y"), **entry}
+                 "date": datetime.now().strftime("%d/%m/%Y"), **entry,
+                 **{key: portable(entry[key], self.project_folder) for key in ISSUE_PATHS
+                    if entry.get(key)}}
         self.data.setdefault("issues", []).append(issue)
         self.write()
-        return issue
+        return self.public_issue(issue)
 
     def _repackage(self, record: dict[str, Any], package: str) -> None:
         destination = self.root / record.get("moduleFolder", "") / package
         for revision in record.get("revisions", []):
-            source = self.root / revision["relativePath"]
+            source = self.file_of(revision)
             folder = destination / SUPERSEDED if revision.get("superseded") else destination
             folder.mkdir(parents=True, exist_ok=True)
             target = folder / source.name
@@ -477,7 +538,7 @@ class Library:
                 source_pdf = source.with_suffix(".pdf")
                 if source_pdf.exists():
                     shutil.move(str(source_pdf), str(target.with_suffix(".pdf")))
-            revision["relativePath"] = str(target.relative_to(self.root))
+            revision["relativePath"] = target.relative_to(self.root).as_posix()
         record["package"] = package
 
     @transaction_method
@@ -490,7 +551,7 @@ class Library:
 
     def absolute(self, relative_path: str) -> Path:
         """Resolve a stored relative path, refusing anything outside the library."""
-        target = (self.root / str(relative_path)).resolve()
+        target = locate(relative_path, self.root).resolve()
         if not target.is_relative_to(self.root.resolve()):
             raise ValueError("That file is outside the project's calculation folder")
         return target
@@ -514,10 +575,8 @@ class Library:
                 match = pattern.match(path.name)
                 if not match:
                     continue
-                try:
-                    relative = str(path.relative_to(self.root))
-                except ValueError:
-                    relative = str(path)
+                # Legacy roots sit beside this folder, so their paths start '../'.
+                relative = Path(os.path.relpath(path, self.root)).as_posix()
                 if relative.casefold() in known:
                     continue
                 document = path.read_text(encoding="utf-8")

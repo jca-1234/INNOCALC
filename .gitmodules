@@ -1,0 +1,12 @@
+[submodule "calculations/steel/member"]
+	path = calculations/steel/member
+	url = https://github.com/jca-1234/SteelMemberDesign.git
+	branch = main
+[submodule "calculations/concrete/column"]
+	path = calculations/concrete/column
+	url = https://github.com/jca-1234/ConcreteColumn.git
+	branch = main
+[submodule "calculations/general/calculation_pad"]
+	path = calculations/general/calculation_pad
+	url = https://github.com/jca-1234/CalculationPad.git
+	branch = main

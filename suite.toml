@@ -88,3 +88,59 @@ entry = "ic_concrete_reinforcement_tables.headless"
 category = "Concrete"
 filing_folder = "10 - REINFORCEMENT TABLES"
 enabled = false
+
+[[modules]]
+id = "concrete-two-way-slab"
+path = "calculations/concrete/concrete_two_way_slab/src"
+entry = "ic_concrete_two_way_slab.headless"
+category = "Concrete"
+filing_folder = "11 - CONCRETE TWO-WAY SLAB"
+enabled = false
+
+[[modules]]
+id = "concrete-strut-tie"
+path = "calculations/concrete/concrete_strut_tie/src"
+entry = "ic_concrete_strut_tie.headless"
+category = "Concrete"
+filing_folder = "12 - CONCRETE STRUT AND TIE"
+enabled = false
+
+[[modules]]
+id = "concrete-punching-shear"
+path = "calculations/concrete/concrete_punching_shear/src"
+entry = "ic_concrete_punching_shear.headless"
+category = "Concrete"
+filing_folder = "13 - CONCRETE PUNCHING SHEAR"
+enabled = false
+
+[[modules]]
+id = "concrete-flat-slab"
+path = "calculations/concrete/concrete_flat_slab/src"
+entry = "ic_concrete_flat_slab.headless"
+category = "Concrete"
+filing_folder = "14 - CONCRETE FLAT SLAB"
+enabled = false
+
+[[modules]]
+id = "concrete-wall"
+path = "calculations/concrete/concrete_wall/src"
+entry = "ic_concrete_wall.headless"
+category = "Concrete"
+filing_folder = "15 - CONCRETE WALL"
+enabled = false
+
+[[modules]]
+id = "concrete-industrial-pavement"
+path = "calculations/concrete/concrete_industrial_pavement/src"
+entry = "ic_concrete_industrial_pavement.headless"
+category = "Concrete"
+filing_folder = "16 - INDUSTRIAL PAVEMENT"
+enabled = false
+
+[[modules]]
+id = "concrete-member"
+path = "calculations/concrete/concrete_member/src"
+entry = "ic_concrete_member.headless"
+category = "Concrete"
+filing_folder = "17 - CONCRETE MEMBER"
+enabled = false

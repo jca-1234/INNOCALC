@@ -12,10 +12,26 @@ sys.path.insert(0, str(ROOT / "apps/manager"))
 os.environ["CPD_NO_AUTO_INSTALL"] = "1"
 
 from icm.registry import Registry
-from packages.innocalc_sdk import check_contract, load_manifest
+from packages.innocalc_sdk import check_contract, load_manifest, versioning
 
 
 class SDKTests(unittest.TestCase):
+    def test_version_format_is_major_patch_minor(self):
+        self.assertEqual(versioning.parse("v1.2.3"), (1, 2, 3))
+        self.assertEqual(versioning.bump("v0.0.1", "minor"), "v0.0.2")
+        self.assertEqual(versioning.bump("v0.3.4", "patch"), "v0.4.0")
+        self.assertEqual(versioning.bump("v0.3.4", "major"), "v1.0.0")
+        self.assertEqual(versioning.packaging("v0.0.1"), "0.0.1")
+        for bad in ("V0.04", "0.0.1", "v0.1", "v01.0.0"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                versioning.parse(bad)
+
+    def test_every_module_and_the_manager_start_at_v0_0_1(self):
+        from icm import VERSION
+        self.assertEqual(VERSION, versioning.FIRST)
+        for module in Registry().modules.values():
+            with self.subTest(module=module.id):
+                self.assertEqual(module.adapter.descriptor()["version"], versioning.FIRST)
     def test_current_modules_meet_basic_contract(self):
         registry = Registry()
         self.assertFalse(registry.problems)

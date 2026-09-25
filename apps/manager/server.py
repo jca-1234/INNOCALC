@@ -2,31 +2,35 @@
 """
 InnoCalc Manager - calculation management for Innovis projects.
 
-A browser cannot read or write the network projects drive, so this small local
-service does it and serves the web application from the same origin.  It binds
-to localhost only and uses the Python standard library plus the optional
-``pypdf`` package.
+A browser cannot read or write the network projects drive, so this small
+service does it and serves the web application from the same origin.  By
+default it binds to localhost; as a tenant of the shared application host it
+runs behind the reverse proxy (see ``icm/config.py`` and the README).  It uses
+the Python standard library plus the optional ``pypdf`` package.
 
 The front end knows nothing about any individual calculation: it renders the
 input form from the schema each module publishes and displays the HTML each
 module returns.  Adding a design module therefore needs no front-end change.
 
 Run:    python server.py            (opens http://127.0.0.1:8125/)
-Config: ICM_ROOT   projects root, default J:\\Active Projects
-        ICM_PORT   listening port, default 8125
+Config: ICM_* environment variables, documented in icm/config.py and .env.example
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import math
 import mimetypes
 import os
 import queue
 import string
 import subprocess
+import tempfile
 import threading
+import time
 import webbrowser
+from contextlib import ExitStack
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -34,23 +38,97 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 from icm import VERSION, VERSION_HISTORY
 from icm import auth as auth_module
-from icm import collate, mail, pdf as pdf_tools, qa as qa_module
+from icm import backup as backup_module
+from icm import collate, config, mail, pdf as pdf_tools, proxy, qa as qa_module
+from icm.feedback import PRIORITIES, STATUSES, FeedbackStore
 from icm.library import Library
 from icm.projects import Discovery, ProjectRegistry, normalise_code, project_root
 from icm.registry import CATEGORIES, Registry
 
-HOST = "127.0.0.1"
-PORT = int(os.environ.get("ICM_PORT", "8125"))
-ROOT = os.environ.get("ICM_ROOT", r"J:\Active Projects")
-APP_DIR = Path(__file__).resolve().parent
-DATA_DIR = Path(os.environ.get("ICM_DATA_DIR", str(APP_DIR / "data")))
+log = logging.getLogger("icm")
 
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    SETTINGS = config.load()
+    config.ensure_directories(SETTINGS)
+except config.ConfigurationError as exc:
+    raise SystemExit(f"InnoCalc refused to start: {exc}") from None
+
+HOST, PORT, ROOT = SETTINGS.host, SETTINGS.port, SETTINGS.root
+APP_DIR = Path(__file__).resolve().parent
+DATA_DIR = SETTINGS.data_dir
+
 DIRECTORY = auth_module.Directory(DATA_DIR / "people.json")
 SESSIONS = auth_module.Sessions()
-PROJECTS = ProjectRegistry(DATA_DIR / "projects.json")
-DISCOVERY = Discovery(DATA_DIR / "project-index.json", ROOT)
+PROJECTS = ProjectRegistry(DATA_DIR / "projects.json", ROOT, SETTINGS.legacy_roots)
+FEEDBACK = FeedbackStore(DATA_DIR / "feedback.json")
+DISCOVERY = Discovery(DATA_DIR / "project-index.json", ROOT, SETTINGS.legacy_roots)
+mail.set_share(ROOT, SETTINGS.share_path)
 MODULES = Registry()
+BACKUPS = backup_module.Scheduler(DATA_DIR, SETTINGS.backup_dir,
+                                  SETTINGS.backup_interval_minutes,
+                                  SETTINGS.backup_retention_days)
+
+READ_ONLY_MESSAGE = ("This instance is read-only (a preview on a copy of production); "
+                     "save in production.")
+# Everything that writes into a project folder on the projects share.
+WRITE_ROUTES = {
+    "/api/projects/create", "/api/projects/relink", "/api/projects/adopt",
+    "/api/calculation/save", "/api/calculation/update", "/api/calculation/delete",
+    "/api/calculation/import", "/api/package/build",
+    "/api/qa/create", "/api/qa/update", "/api/qa/comment/add", "/api/qa/comment/update",
+    "/api/qa/markups", "/api/qa/endorse", "/api/qa/export", "/api/qa/scan",
+}
+# Routes behind each tab; shared reads (projects, modules, one calculation) are never gated.
+TAB_ROUTES = {
+    "/api/library": "library", "/api/calculation/update": "library",
+    "/api/calculation/delete": "library", "/api/calculation/import": "library",
+    "/api/projects/adopt": "library",
+    "/api/calculate": "calculation", "/api/module/action": "calculation",
+    "/api/module/validate": "calculation", "/api/calculation/save": "calculation",
+    "/api/calculation/exchange": "calculation",
+    "/api/package/preview": "package", "/api/package/build": "package",
+}
+TAB_LABELS = {"library": "Calculation Index", "calculation": "Calculation",
+              "package": "Package Export", "qa": "Verification"}
+SERVER_MARKER = ".innocalc-server.json"
+
+
+class Forbidden(Exception):
+    """Signed in, but this role may not use the tab or module (403)."""
+
+
+class ReadOnly(Exception):
+    """The instance does not write to the projects share (409)."""
+
+
+def tab_for(route: str) -> str:
+    return "qa" if route.startswith("/api/qa") else TAB_ROUTES.get(route, "")
+
+
+def server_owner() -> str | None:
+    """On a PC: why writes are refused once the server has taken over the projects root."""
+    if not SETTINGS.desktop:
+        return None
+    try:
+        claim = json.loads((Path(SETTINGS.root) / SERVER_MARKER).read_bytes())
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        claim = {}
+    where = f" at {claim['url']}" if isinstance(claim, dict) and claim.get("url") else ""
+    return (f"Projects on this drive are now managed by the InnoCalc server{where}; "
+            "save your work there.")
+
+
+def claim_projects() -> None:
+    """Mark the projects root as server-managed so desktop copies stop writing to it."""
+    url = f"https://{SETTINGS.allowed_hosts[0]}/" if SETTINGS.allowed_hosts else ""
+    marker = Path(SETTINGS.root) / SERVER_MARKER
+    temporary = marker.with_name(marker.name + ".tmp")
+    temporary.write_text(json.dumps({"url": url, "version": VERSION,
+                                     "since": time.strftime("%Y-%m-%dT%H:%M:%S")}),
+                         encoding="utf-8")
+    temporary.replace(marker)
 
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
                 ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
@@ -132,14 +210,40 @@ def list_drives() -> list[str]:
     return [f"{letter}:\\" for letter in string.ascii_uppercase if os.path.exists(f"{letter}:\\")]
 
 
+def confined(path: Any) -> str:
+    """On the server, every path a browser supplies must lie under the projects root."""
+    text = str(path or "").strip()
+    if SETTINGS.desktop or not text:
+        return text
+    root = Path(SETTINGS.root).resolve()
+    target = Path(text).resolve()
+    if target != root and root not in target.parents:
+        raise ValueError("Only folders under the projects root can be used on the server")
+    return str(target)
+
+
+def confined_parts(parts: Any) -> Any:
+    """Drawing and document lists carry a path each; confine every one."""
+    if SETTINGS.desktop or not parts:
+        return parts
+    return [{**part, "path": confined(part.get("path", ""))}
+            for part in parts if isinstance(part, dict)]
+
+
 def browse(path: str) -> dict[str, Any]:
     if not path:
+        places = list_drives() if SETTINGS.desktop else [SETTINGS.root]
         return {"ok": True, "path": "", "parent": None,
-                "dirs": [{"name": item, "path": item} for item in list_drives()]}
-    path = os.path.abspath(path)
+                "dirs": [{"name": item, "path": item} for item in places]}
+    path = os.path.abspath(confined(path))
     parent = os.path.dirname(path.rstrip("\\/")) or None
     if parent == path:
         parent = None
+    if parent and not SETTINGS.desktop:
+        try:
+            confined(parent)
+        except ValueError:
+            parent = None
     dirs = []
     try:
         with os.scandir(path) as entries:
@@ -152,6 +256,7 @@ def browse(path: str) -> dict[str, Any]:
 
 
 def list_files(path: str, suffix: str = "") -> dict[str, Any]:
+    path = confined(path)
     if not path or not os.path.isdir(path):
         return {"ok": False, "error": "folder not found", "files": []}
     files = []
@@ -219,6 +324,8 @@ def project_meta(project: dict[str, Any], actor: dict[str, Any],
 
 def reveal(path: str) -> dict[str, Any]:
     """Show a file or folder in Windows Explorer."""
+    if not SETTINGS.desktop:
+        raise ValueError("Opening Explorer is only available when InnoCalc runs on your PC")
     if not path or not within_project(path):
         raise ValueError("That location is not inside one of your projects")
     target = Path(path)
@@ -250,6 +357,14 @@ def within_project(path: str) -> bool:
     return False
 
 
+def writable(folder: Path) -> bool:
+    try:
+        with tempfile.TemporaryFile(dir=folder):
+            return True
+    except OSError:
+        return False
+
+
 # --------------------------------------------------------------------------
 #  HTTP handler
 # --------------------------------------------------------------------------
@@ -270,6 +385,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
+        if SETTINGS.https:
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
         self.end_headers()
         if self.command != "HEAD":
             try:
@@ -277,21 +394,101 @@ class Handler(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
                 pass
 
+    def _peer(self) -> str:
+        return str(self.client_address[0])
+
+    def _admit(self) -> bool:
+        """Host allow-list and the identity-header backstop, before any routing."""
+        if not SETTINGS.host_allowed(self.headers.get("Host", "")):
+            self.close_connection = True
+            self._send(400, {"ok": False, "error": "Invalid host header"})
+            return False
+        if (SETTINGS.auth_mode == "proxy" and self.headers.get(SETTINGS.user_header)
+                and not SETTINGS.trusts(self._peer())):
+            log.warning("Refused %s header from untrusted peer %s", SETTINGS.user_header,
+                        self._peer())
+            self.close_connection = True
+            self._send(401, {"ok": False, "error": "Sign-in is only accepted through the "
+                                                   "InnoCalc proxy"})
+            return False
+        return True
+
+    def _proxy_user(self) -> dict[str, Any]:
+        claimed = proxy.identity(SETTINGS, self._peer(), self.headers)
+        try:
+            email = auth_module.normalise_email(claimed)
+        except ValueError as exc:
+            raise PermissionError(str(exc)) from None
+        if email in DIRECTORY.data:
+            return DIRECTORY.public(email)
+        return DIRECTORY.upsert(email)
+
     def _actor(self, token: Any) -> dict[str, Any]:
+        if SETTINGS.auth_mode == "proxy":
+            return self._proxy_user()
         return SESSIONS.actor(token)
+
+    def _optional_actor(self, token: Any) -> dict[str, Any] | None:
+        try:
+            return self._actor(token)
+        except PermissionError:
+            return None
 
     def _project(self, token: Any, project_id: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         actor = self._actor(token)
         return actor, PROJECTS.get(project_id)
 
+    def _module(self, module_id: Any, actor: dict[str, Any] | None):
+        module = MODULES.get(module_id)
+        if not SETTINGS.permitted(SETTINGS.module_access, module.id, actor):
+            raise Forbidden(f"{module.descriptor.get('name', module.id)} is not available to you")
+        return module
+
+    def _check_access(self, route: str, token: Any) -> None:
+        if SETTINGS.read_only and route in WRITE_ROUTES:
+            raise ReadOnly(READ_ONLY_MESSAGE)
+        if route in WRITE_ROUTES and (moved := server_owner()) is not None:
+            raise ReadOnly(moved)
+        tab = tab_for(route)
+        if tab and SETTINGS.tab_access.get(tab, "user") != "user":
+            if not SETTINGS.permitted(SETTINGS.tab_access, tab, self._actor(token)):
+                raise Forbidden(f"The {TAB_LABELS[tab]} tab is not available to you")
+
     def _origin(self) -> str:
-        return f"http://{HOST}:{PORT}"
+        return proxy.origin(SETTINGS, self._peer(), self.headers)
+
+    def _health(self) -> None:
+        """Unauthenticated: 200 ok or degraded, 503 when the data folder is unusable."""
+        data_ok = SETTINGS.data_dir.is_dir() and writable(SETTINGS.data_dir)
+        browser = str(pdf_tools.available()["browser"])
+        last = BACKUPS.last
+        checks = {"dataDir": data_ok, "projectsRoot": os.path.isdir(SETTINGS.root),
+                  "modules": len(MODULES.modules), "moduleProblems": len(MODULES.problems),
+                  "pdfBrowser": not browser.startswith("unavailable"),
+                  "lastBackup": last.public() if last else None}
+        healthy = (checks["projectsRoot"] and checks["pdfBrowser"] and not MODULES.problems
+                   and (last is None or last.status != "failed"))
+        status = "unavailable" if not data_ok else "ok" if healthy else "degraded"
+        self._send(200 if data_ok else 503,
+                   {"ok": data_ok, "status": status, "version": VERSION, "checks": checks,
+                    "configuration": SETTINGS.configuration()})
+
+    def _session(self, user: dict[str, Any]) -> dict[str, Any]:
+        moved = server_owner()
+        return {"tabs": SETTINGS.tabs_for(user), "role": SETTINGS.role_of(user),
+                "readOnly": SETTINGS.read_only or moved is not None,
+                "readOnlyReason": moved or "", "desktop": SETTINGS.desktop}
 
     # -- GET ----------------------------------------------------------------
     def do_GET(self):
+        if not self._admit():
+            return
         parsed = urlparse(self.path)
         route, query = parsed.path, parse_qs(parsed.query)
         token = query.get("token", [""])[0]
+        if route == "/api/health":
+            self._health()
+            return
         try:
             handler = {
                 "/api/ping": self._ping,
@@ -311,6 +508,8 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/file": None,
                 "/api/qa": self._qa_list,
                 "/api/qa/status": self._qa_status,
+                "/api/feedback": self._feedback_list,
+                "/api/feedback/export": self._feedback_export,
                 "/api/versions": lambda q: {"ok": True, "version": VERSION,
                                             "history": VERSION_HISTORY},
                 "/auth/sso/start": self._sso_start,
@@ -319,6 +518,7 @@ class Handler(BaseHTTPRequestHandler):
             if handler == "static":
                 self._serve_static(route)
                 return
+            self._check_access(route, token)
             if route == "/api/file":
                 self._serve_generated(token, query.get("path", [""])[0])
                 return
@@ -326,6 +526,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, {"ok": False, "error": "unknown endpoint"})
                 return
             self._send(200, handler(query))
+        except ReadOnly as exc:
+            self._send(409, {"ok": False, "error": str(exc)})
+        except Forbidden as exc:
+            self._send(403, {"ok": False, "error": str(exc)})
         except PermissionError as exc:
             self._send(401, {"ok": False, "error": str(exc)})
         except (ValueError, OSError, RuntimeError) as exc:
@@ -344,9 +548,12 @@ class Handler(BaseHTTPRequestHandler):
         "/api/package/preview", "/api/package/build",
         "/api/qa/create", "/api/qa/update", "/api/qa/comment/add", "/api/qa/comment/update",
         "/api/qa/markups", "/api/qa/endorse", "/api/qa/export", "/api/qa/scan",
+        "/api/feedback/submit", "/api/feedback/vote", "/api/feedback/update",
     }
 
     def do_POST(self):
+        if not self._admit():
+            return
         parsed = urlparse(self.path)
         if parsed.path not in self.ROUTES:
             self._send(404, {"ok": False, "error": "unknown endpoint"})
@@ -358,6 +565,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"ok": False, "error": f"bad request: {exc}"})
             return
         try:
+            self._check_access(parsed.path, payload.get("token"))
             self._send(200, {
                 "/api/auth/signin": self._sign_in,
                 "/api/auth/signout": self._sign_out,
@@ -390,7 +598,14 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/qa/endorse": self._qa_endorse,
                 "/api/qa/export": self._qa_export,
                 "/api/qa/scan": self._qa_scan,
+                "/api/feedback/submit": self._feedback_submit,
+                "/api/feedback/vote": self._feedback_vote,
+                "/api/feedback/update": self._feedback_update,
             }[parsed.path](payload))
+        except ReadOnly as exc:
+            self._send(409, {"ok": False, "error": str(exc)})
+        except Forbidden as exc:
+            self._send(403, {"ok": False, "error": str(exc)})
         except PermissionError as exc:
             self._send(401, {"ok": False, "error": str(exc)})
         except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
@@ -405,28 +620,88 @@ class Handler(BaseHTTPRequestHandler):
 
     def _auth_config(self, _query) -> dict[str, Any]:
         return {"ok": True, "sso": auth_module.sso_status(), "people": DIRECTORY.everyone(),
-                "version": VERSION}
+                "version": VERSION,
+                "auth": {"mode": SETTINGS.auth_mode, "readOnly": SETTINGS.read_only}}
 
-    def _modules(self, _query) -> dict[str, Any]:
-        return {"ok": True, "modules": MODULES.catalogue(), "categories": CATEGORIES,
+    def _modules(self, query) -> dict[str, Any]:
+        actor = self._optional_actor(query.get("token", [""])[0])
+        visible = [item for item in MODULES.catalogue()
+                   if SETTINGS.permitted(SETTINGS.module_access, item["id"], actor)]
+        return {"ok": True, "modules": visible, "categories": CATEGORIES,
                 "problems": MODULES.problems}
 
     def _module_schema(self, query) -> dict[str, Any]:
-        module = MODULES.get(query.get("module", [""])[0])
+        module = self._module(query.get("module", [""])[0],
+                              self._optional_actor(query.get("token", [""])[0]))
         return {"ok": True, "schema": module.call("schema"), "defaults": module.call("defaults")}
 
     # -------------------------------------------------------------- identity
     def _sign_in(self, payload) -> dict[str, Any]:
-        if auth_module.SSO_ENABLED:
-            raise PermissionError("Sign in with your Office 365 account")
-        user = DIRECTORY.upsert(payload.get("email"), str(payload.get("fullName", "")),
-                                str(payload.get("initials", "")))
-        return {"ok": True, "token": SESSIONS.issue(user), "user": user,
-                "people": DIRECTORY.everyone()}
+        if SETTINGS.auth_mode == "proxy":
+            user, token = self._proxy_user(), ""
+        else:
+            if auth_module.SSO_ENABLED:
+                raise PermissionError("Sign in with your Office 365 account")
+            user = self._development_user(payload)
+            token = SESSIONS.issue(user)
+        return {"ok": True, "token": token, "user": user, "people": DIRECTORY.everyone(),
+                **self._session(user)}
+
+    @staticmethod
+    def _development_user(payload) -> dict[str, Any]:
+        """Pick an existing name, or create a username from a full name; no email is asked for."""
+        full_name = str(payload.get("fullName", ""))
+        initials = str(payload.get("initials", ""))
+        if payload.get("userId"):
+            key = str(payload["userId"]).strip().lower()
+            if key not in DIRECTORY.data:
+                raise ValueError("That name is not in the list; create a new username instead")
+            return DIRECTORY.upsert(key)
+        if payload.get("newUser"):
+            key = auth_module.username_for(full_name)
+            if key in DIRECTORY.data:
+                raise ValueError(f"{DIRECTORY.public(key)['displayName']} is already listed; "
+                                 "choose that name from the list")
+            return DIRECTORY.upsert(key, full_name, initials)
+        # Scripts and tests may still identify by address.
+        return DIRECTORY.upsert(payload.get("email"), full_name, initials)
 
     def _sign_out(self, payload) -> dict[str, Any]:
         SESSIONS.revoke(payload.get("token"))
         return {"ok": True}
+
+    # -------------------------------------------------------------- feedback
+    def _admin(self, token: Any) -> dict[str, Any]:
+        actor = self._actor(token)
+        if SETTINGS.role_of(actor) != "admin":
+            raise Forbidden("Only an admin can triage feedback")
+        return actor
+
+    def _feedback_list(self, query) -> dict[str, Any]:
+        actor = self._actor(query.get("token", [""])[0])
+        return {"ok": True, "admin": SETTINGS.role_of(actor) == "admin",
+                "statuses": list(STATUSES), "priorities": list(PRIORITIES),
+                "reports": FEEDBACK.reports(kind=query.get("kind", [""])[0],
+                                            status=query.get("status", [""])[0],
+                                            search=query.get("search", [""])[0])}
+
+    def _feedback_export(self, query) -> dict[str, Any]:
+        self._admin(query.get("token", [""])[0])
+        return {"ok": True, "csv": FEEDBACK.as_csv()}
+
+    def _feedback_submit(self, payload) -> dict[str, Any]:
+        actor = self._actor(payload.get("token"))
+        context = dict(payload.get("context") or {}, version=VERSION)
+        return {"ok": True, "report": FEEDBACK.submit({**payload, "context": context}, actor)}
+
+    def _feedback_vote(self, payload) -> dict[str, Any]:
+        actor = self._actor(payload.get("token"))
+        return {"ok": True, "report": FEEDBACK.vote(str(payload.get("id", "")), actor)}
+
+    def _feedback_update(self, payload) -> dict[str, Any]:
+        actor = self._admin(payload.get("token"))
+        fields = {key: payload[key] for key in ("status", "priority", "response") if key in payload}
+        return {"ok": True, "report": FEEDBACK.update(str(payload.get("id", "")), fields, actor)}
 
     def _sso_start(self, _query) -> dict[str, Any]:
         return {"ok": True, **auth_module.start_sso(self._origin())}
@@ -435,7 +710,7 @@ class Handler(BaseHTTPRequestHandler):
         profile = auth_module.complete_sso(query.get("code", [""])[0],
                                            query.get("state", [""])[0], self._origin())
         user = DIRECTORY.upsert(profile["email"], profile.get("displayName", ""))
-        return {"ok": True, "token": SESSIONS.issue(user), "user": user}
+        return {"ok": True, "token": SESSIONS.issue(user), "user": user, **self._session(user)}
 
     # -------------------------------------------------------------- projects
     def _projects(self, query) -> dict[str, Any]:
@@ -449,7 +724,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _create_project(self, payload) -> dict[str, Any]:
         actor = self._actor(payload.get("token"))
-        project = PROJECTS.register(str(payload.get("path", "")), actor)
+        project = PROJECTS.register(confined(payload.get("path", "")), actor)
         fields = {key: payload[key] for key in ("code", "clientRef", "projectName")
                   if payload.get(key)}
         if fields:
@@ -463,18 +738,22 @@ class Handler(BaseHTTPRequestHandler):
         actor = self._actor(payload.get("token"))
         project_id = str(payload.get("projectId", ""))
         if not project_id and payload.get("path"):
-            project = PROJECTS.by_path(payload["path"]) or PROJECTS.register(
-                str(payload["path"]), actor)
+            path = confined(payload["path"])
+            project = PROJECTS.by_path(path)
+            if not project and SETTINGS.read_only:
+                raise ReadOnly(READ_ONLY_MESSAGE)
+            project = project or PROJECTS.register(path, actor)
             project_id = project["id"]
         project = PROJECTS.get(project_id)
         if not os.path.isdir(project["folderPath"]):
             raise ValueError(f"The project folder is not reachable: {project['folderPath']}")
         PROJECTS.touch(project_id, actor)
         library = library_for(project)
+        store = qa_module.QAStore(library, project)
         return {"ok": True, "project": PROJECTS.get(project_id),
                 "library": library.index(),
                 "meta": project_meta(project, actor),
-                "qa": [self._qa_public(item) for item in library.data.get("qaPackages", [])],
+                "qa": [store.public(item) for item in store.packages],
                 "projects": PROJECTS.for_user(actor)}
 
     def _find_project(self, payload) -> dict[str, Any]:
@@ -489,7 +768,7 @@ class Handler(BaseHTTPRequestHandler):
     def _relink_project(self, payload) -> dict[str, Any]:
         actor = self._actor(payload.get("token"))
         project = PROJECTS.relink(str(payload.get("projectId", "")),
-                                  str(payload.get("path", "")))
+                                  confined(payload.get("path", "")))
         DISCOVERY.remember(project["folderPath"])
         return {"ok": True, "project": project, "projects": PROJECTS.for_user(actor)}
 
@@ -515,10 +794,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _project_people(self, payload) -> dict[str, Any]:
         actor = self._actor(payload.get("token"))
-        project = PROJECTS.set_people(str(payload.get("projectId", "")),
-                                      list(payload.get("designers", [])),
-                                      list(payload.get("verifiers", [])))
-        return {"ok": True, "project": project, "projects": PROJECTS.for_user(actor)}
+        designers = list(payload.get("designers", []))
+        verifiers = list(payload.get("verifiers", []))
+        for person in payload.get("newPeople") or []:
+            key = auth_module.username_for(person.get("fullName"))
+            if key not in DIRECTORY.data:
+                DIRECTORY.upsert(key, str(person.get("fullName", "")))
+            (verifiers if person.get("role") == "verifier" else designers).append(key)
+        project = PROJECTS.set_people(str(payload.get("projectId", "")), designers, verifiers)
+        return {"ok": True, "project": project, "projects": PROJECTS.for_user(actor),
+                "people": DIRECTORY.everyone()}
 
     def _adopt_existing(self, payload) -> dict[str, Any]:
         actor, project = self._project(payload.get("token"), payload.get("projectId"))
@@ -528,6 +813,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _pick(self, query) -> dict[str, Any]:
         self._actor(query.get("token", [""])[0])
+        if not SETTINGS.desktop:
+            return {"ok": False, "path": "",
+                    "error": "The folder picker is only available when InnoCalc runs on your "
+                             "PC; type or paste the path instead"}
         picked = native_pick(query.get("title", ["Select project folder"])[0],
                              query.get("mode", [""])[0] == "file")
         if picked.get("path") and query.get("scope", [""])[0] == "project":
@@ -540,8 +829,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # ----------------------------------------------------------- calculation
     def _calculate(self, payload) -> dict[str, Any]:
-        self._actor(payload.get("token"))
-        module = MODULES.get(payload.get("module"))
+        module = self._module(payload.get("module"), self._actor(payload.get("token")))
         inputs = payload.get("inputs")
         if not isinstance(inputs, dict):
             raise ValueError("An inputs object is required")
@@ -554,15 +842,13 @@ class Handler(BaseHTTPRequestHandler):
                 "reportHtml": module.call("render", inputs, result, **render_options)}
 
     def _module_action(self, payload) -> dict[str, Any]:
-        self._actor(payload.get("token"))
-        module = MODULES.get(payload.get("module"))
+        module = self._module(payload.get("module"), self._actor(payload.get("token")))
         outcome = module.call("run_action", str(payload.get("action", "")),
                               payload.get("inputs") or {})
         return {"ok": True, **outcome}
 
     def _module_validate(self, payload) -> dict[str, Any]:
-        self._actor(payload.get("token"))
-        module = MODULES.get(payload.get("module"))
+        module = self._module(payload.get("module"), self._actor(payload.get("token")))
         return {"ok": True, "validation": module.call("validate", payload.get("cases"))}
 
     def _library(self, query) -> dict[str, Any]:
@@ -590,7 +876,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _save_calculation(self, payload) -> dict[str, Any]:
         actor, project = self._project(payload.get("token"), payload.get("projectId"))
-        module = MODULES.get(payload.get("module"))
+        module = self._module(payload.get("module"), actor)
         inputs = dict(payload.get("inputs") or {})
         inputs.update(project_meta(project, actor, payload.get("meta")))
         library = library_for(project)
@@ -629,7 +915,7 @@ class Handler(BaseHTTPRequestHandler):
         actor, project = self._project(payload.get("token"), payload.get("projectId"))
         library = library_for(project)
         imported = library.import_pdf(
-            source=str(payload.get("path", "")),
+            source=confined(payload.get("path", "")),
             member_type=str(payload.get("memberType", "")),
             number=str(payload.get("memberNumber", "")),
             package=str(payload.get("package", "")),
@@ -658,10 +944,10 @@ class Handler(BaseHTTPRequestHandler):
         actor, project = self._project(payload.get("token"), payload.get("projectId"))
         library = library_for(project)
         record = library.calculation(str(payload.get("sourceId", "")))
-        source = MODULES.get(record["module"])
+        source = self._module(record["module"], actor)
         result = source.call("compute", record["inputs"])
         parcel = source.call("exchange", record["inputs"], result)
-        target = MODULES.get(payload.get("targetModule") or record["module"])
+        target = self._module(payload.get("targetModule") or record["module"], actor)
         if not target.has("apply_exchange"):
             raise ValueError(f"{target.descriptor['name']} cannot receive linked values")
         inputs = target.call("apply_exchange", payload.get("inputs") or target.call("defaults"),
@@ -695,7 +981,8 @@ class Handler(BaseHTTPRequestHandler):
         built = collate.build_pdf(library, MODULES, list(payload.get("selection") or []), meta,
                                   destination, sort_fields=payload.get("sort"),
                                   include_superseded=bool(payload.get("includeSuperseded")),
-                                  drawings=payload.get("drawings"), reference=ref,
+                                  drawings=confined_parts(payload.get("drawings")),
+                                  reference=ref,
                                   purpose=purpose,
                                   verifier_initials=str((payload.get("meta") or {})
                                                         .get("verifierInitials", "")))
@@ -711,7 +998,8 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, OSError):
             pass
         return {"ok": True, **built, "issue": issue, "draft": draft,
-                "issues": list(reversed(library.data.get("issues", []))),
+                "issues": [library.public_issue(item)
+                           for item in reversed(library.data.get("issues", []))],
                 "url": "/api/file?" + urlencode({"path": built["pdfPath"]})}
 
     @staticmethod
@@ -738,10 +1026,6 @@ class Handler(BaseHTTPRequestHandler):
             return {"path": "", "opened": False, "error": str(exc)}
 
     # -------------------------------------------------------------------- QA
-    @staticmethod
-    def _qa_public(package: dict[str, Any]) -> dict[str, Any]:
-        return {key: value for key, value in package.items() if key != "entries"}
-
     def _qa_store(self, token: Any, project_id: Any) -> tuple[Any, dict, Library, qa_module.QAStore]:
         actor, project = self._project(token, project_id)
         library = library_for(project)
@@ -752,8 +1036,9 @@ class Handler(BaseHTTPRequestHandler):
                                                         query.get("project", [""])[0])
         # A verifier returns a marked-up PDF to the package folder, so every
         # refresh reads those files rather than waiting for an explicit import.
-        found = store.scan_returns(actor) if query.get("scan", ["1"])[0] == "1" else {"added": 0}
-        packages = [self._qa_public(item) for item in store.packages
+        scan = query.get("scan", ["1"])[0] == "1" and not SETTINGS.read_only
+        found = store.scan_returns(actor) if scan else {"added": 0}
+        packages = [store.public(item) for item in store.packages
                     if store.can_access(item, actor)]
         return {"ok": True, "packages": packages, "template": qa_module.form_template(),
                 "imported": found.get("added", 0), "summary": store.status_summary()}
@@ -762,7 +1047,7 @@ class Handler(BaseHTTPRequestHandler):
         actor, project, library, store = self._qa_store(payload.get("token"),
                                                         payload.get("projectId"))
         found = store.scan_returns(actor)
-        packages = [self._qa_public(item) for item in store.packages
+        packages = [store.public(item) for item in store.packages
                     if store.can_access(item, actor)]
         return {"ok": True, **found, "packages": packages}
 
@@ -790,15 +1075,16 @@ class Handler(BaseHTTPRequestHandler):
             title=str(payload.get("title", "")), reviewer=str(payload.get("reviewer", "")),
             reviewer_email=str(payload.get("reviewerEmail", "")), actor=actor,
             registry=MODULES, selection=list(payload.get("selection") or []), meta=meta,
-            sort_fields=payload.get("sort"), drawings=payload.get("drawings"),
+            sort_fields=payload.get("sort"), drawings=confined_parts(payload.get("drawings")),
             documents=payload.get("documents"), methods=payload.get("methods"),
             statement=payload.get("statement"),
             producer_comments=str(payload.get("producerComments", "")),
             reviewer_initials=str(payload.get("reviewerInitials", "")),
             drawing_set=payload.get("drawingSet"))
-        return {"ok": True, "package": self._qa_public(package),
+        shown = store.public(package)
+        return {"ok": True, "package": shown,
                 "draft": package.get("draftEmail") or {},
-                "url": "/api/file?" + urlencode({"path": package["calculationPdf"]})}
+                "url": "/api/file?" + urlencode({"path": shown["calculationPdf"]})}
 
     def _qa_guard(self, store, package_id, actor):
         package = store.get(package_id)
@@ -811,7 +1097,7 @@ class Handler(BaseHTTPRequestHandler):
                                                         payload.get("projectId"))
         self._qa_guard(store, payload.get("packageId"), actor)
         package = store.update_package(str(payload.get("packageId")), payload.get("fields") or {})
-        return {"ok": True, "package": self._qa_public(package)}
+        return {"ok": True, "package": store.public(package)}
 
     def _qa_add_comment(self, payload) -> dict[str, Any]:
         actor, project, library, store = self._qa_store(payload.get("token"),
@@ -819,7 +1105,7 @@ class Handler(BaseHTTPRequestHandler):
         self._qa_guard(store, payload.get("packageId"), actor)
         package = store.add_comment(str(payload.get("packageId")),
                                     payload.get("comment") or {}, actor)
-        return {"ok": True, "package": self._qa_public(package)}
+        return {"ok": True, "package": store.public(package)}
 
     def _qa_update_comment(self, payload) -> dict[str, Any]:
         actor, project, library, store = self._qa_store(payload.get("token"),
@@ -828,16 +1114,16 @@ class Handler(BaseHTTPRequestHandler):
         package = store.update_comment(str(payload.get("packageId")),
                                        str(payload.get("commentId")),
                                        payload.get("fields") or {}, actor)
-        return {"ok": True, "package": self._qa_public(package)}
+        return {"ok": True, "package": store.public(package)}
 
     def _qa_markups(self, payload) -> dict[str, Any]:
         actor, project, library, store = self._qa_store(payload.get("token"),
                                                         payload.get("projectId"))
         self._qa_guard(store, payload.get("packageId"), actor)
         outcome = store.import_markups(str(payload.get("packageId")),
-                                       str(payload.get("path", "")), actor)
+                                       confined(payload.get("path", "")), actor)
         return {"ok": True, "added": outcome["added"],
-                "package": self._qa_public(outcome["package"])}
+                "package": store.public(outcome["package"])}
 
     def _qa_endorse(self, payload) -> dict[str, Any]:
         actor, project, library, store = self._qa_store(payload.get("token"),
@@ -849,7 +1135,7 @@ class Handler(BaseHTTPRequestHandler):
             raise PermissionError("Only the nominated verifier may endorse this package")
         package = store.endorse(str(payload.get("packageId")), str(payload.get("action", "")),
                                 actor, str(payload.get("note", "")))
-        return {"ok": True, "package": self._qa_public(package)}
+        return {"ok": True, "package": store.public(package)}
 
     def _qa_export(self, payload) -> dict[str, Any]:
         actor, project, library, store = self._qa_store(payload.get("token"),
@@ -885,27 +1171,46 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    url = f"http://{HOST}:{PORT}/"
-    print(f"InnoCalc Manager {VERSION}")
-    print(f"  Projects root : {ROOT}  ({'found' if os.path.isdir(ROOT) else 'NOT found'})")
-    print(f"  Modules       : {', '.join(sorted(MODULES.modules)) or 'none'}")
-    for problem in MODULES.problems:
-        print(f"    ! {problem['entry']}: {problem['error']}")
-    print(f"  Sign-in       : {auth_module.sso_status()['mode']} (no passwords)")
-    print(f"  Serving       : {url}")
-    print("  Press Ctrl+C to stop.")
-    if os.path.isdir(ROOT):
-        DISCOVERY.refresh_async()
-    try:
-        webbrowser.open(url)
-    except Exception:  # noqa: BLE001 - a missing browser must not stop the service
-        pass
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nStopped.")
-        server.shutdown()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    with ExitStack() as stack:
+        try:
+            backup_module.hold_data_lock(DATA_DIR, stack)
+        except backup_module.Refused:
+            raise SystemExit(f"Another InnoCalc is already using {DATA_DIR}") from None
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+        url = f"http://{HOST}:{PORT}/"
+        sign_in = ("proxy (identity from the reverse proxy)" if SETTINGS.auth_mode == "proxy"
+                   else f"{auth_module.sso_status()['mode']} (no passwords)")
+        print(f"InnoCalc {VERSION}")
+        print(f"  Projects root : {ROOT}  ({'found' if os.path.isdir(ROOT) else 'NOT found'})")
+        print(f"  Modules       : {', '.join(sorted(MODULES.modules)) or 'none'}")
+        for problem in MODULES.problems:
+            print(f"    ! {problem['entry']}: {problem['error']}")
+        print(f"  Sign-in       : {sign_in}")
+        if SETTINGS.read_only:
+            print("  Read-only     : nothing is written to the projects share")
+        print(f"  Backups       : {SETTINGS.backup_dir}")
+        print(f"  Serving       : {url}")
+        print("  Press Ctrl+C to stop.")
+        if os.path.isdir(ROOT):
+            DISCOVERY.refresh_async()
+        if SETTINGS.owns_projects:
+            try:
+                claim_projects()
+            except OSError as exc:
+                raise SystemExit(f"InnoCalc could not mark {ROOT} as server-managed: {exc}") from None
+            print("  Projects root : marked as server-managed; PCs will not write to it")
+        BACKUPS.start()
+        if SETTINGS.desktop:
+            try:
+                webbrowser.open(url)
+            except Exception:  # noqa: BLE001 - a missing browser must not stop the service
+                pass
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            print("\nStopped.")
+            server.shutdown()
 
 
 if __name__ == "__main__":

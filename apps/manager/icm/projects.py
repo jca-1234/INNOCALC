@@ -19,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+from .paths import is_absolute, locate, relative
+
 # A project code is an optional letter prefix, three to six digits, optional suffix.
 _CODE_SHAPE = re.compile(r"^[A-Z]{0,2}\d{3,6}[A-Z]?$")
 # 'J3601 to J3700' style block folders are containers, not projects.
@@ -133,6 +135,19 @@ def _atomic_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
+def under_root(folder_path: Any, root: Any, legacy_roots: tuple[str, ...] = ()) -> str | None:
+    """A folder's location relative to the projects root ('/' separated), or None if outside.
+
+    A path written on a PC under a legacy root such as ``J:\\Active Projects`` is
+    recognised on any host, so a Linux server can adopt a PC's records.
+    """
+    for base in (root, *legacy_roots):
+        found = relative(folder_path, base)
+        if found is not None:
+            return found
+    return None
+
+
 # ---------------------------------------------------------------------------
 #  Background discovery
 # ---------------------------------------------------------------------------
@@ -143,9 +158,10 @@ class Discovery:
     immediately and schedules a refresh when the cache cannot answer.
     """
 
-    def __init__(self, path: Path, root: str):
+    def __init__(self, path: Path, root: str, legacy_roots: tuple[str, ...] = ()):
         self.path = Path(path)
         self.root = str(root)
+        self.legacy_roots = tuple(legacy_roots)
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         try:
@@ -156,15 +172,29 @@ class Discovery:
         self.data.setdefault("schema", 1)
         self.data.setdefault("projects", {})
         self.data.setdefault("scannedAt", "")
-        if self.data.get("root") != self.root:
-            self.data["projects"] = {}
-            self.data["scannedAt"] = ""
-        self.data["root"] = self.root
+        # Older releases stored absolute paths under a recorded root; adopt them.
+        stored_root = str(self.data.pop("root", "") or "")
+        roots = tuple(item for item in (stored_root, *self.legacy_roots) if item)
+        self.data["projects"] = {
+            code: [self._absolute(item, roots) for item in paths]
+            for code, paths in self.data["projects"].items()}
+
+    def _absolute(self, stored: str, roots: tuple[str, ...] = ()) -> str:
+        if is_absolute(stored):
+            found = under_root(stored, self.root, roots)
+            return stored if found is None else str(locate(found, self.root))
+        return str(locate(stored, self.root))
 
     # -- persistence --------------------------------------------------------
     def write(self) -> None:
         with self._lock:
-            _atomic_json(self.path, self.data)
+            _atomic_json(self.path, {**self.data, "projects": {
+                code: [self._stored(item) for item in paths]
+                for code, paths in self.data["projects"].items()}})
+
+    def _stored(self, folder_path: str) -> str:
+        found = under_root(folder_path, self.root)
+        return folder_path if found is None else found
 
     def remember(self, folder_path: str) -> None:
         """Record a folder permanently, including one chosen outside the root."""
@@ -293,8 +323,10 @@ class Discovery:
 class ProjectRegistry:
     """Durable list of projects and each person's view of them."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, root: str = "", legacy_roots: tuple[str, ...] = ()):
         self.path = Path(path)
+        self.root = str(root)
+        self.legacy_roots = tuple(legacy_roots)
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -303,11 +335,30 @@ class ProjectRegistry:
         self.data.setdefault("schema", 1)
         self.data.setdefault("projects", {})
         self.data.setdefault("members", {})
+        for project in self.data["projects"].values():
+            self._place(project)
         self._lock = threading.Lock()
 
+    def _place(self, project: dict[str, Any]) -> None:
+        """Set ``folderPath`` for this machine from the stored, root-relative ``location``."""
+        if "location" not in project:
+            found = under_root(project.get("folderPath", ""), self.root, self.legacy_roots)
+            project["location"] = "" if found is None else found
+        if project["location"]:
+            project["folderPath"] = str(locate(project["location"], self.root))
+
+    def _locate_new(self, project: dict[str, Any]) -> None:
+        found = under_root(project["folderPath"], self.root)
+        project["location"] = "" if found is None else found
+
     def write(self) -> None:
+        """Projects under the root are stored by location only; no drive letter is written."""
         with self._lock:
-            _atomic_json(self.path, self.data)
+            stored = {project_id: ({key: value for key, value in project.items()
+                                    if key != "folderPath"} if project.get("location")
+                                   else project)
+                      for project_id, project in self.data["projects"].items()}
+            _atomic_json(self.path, {**self.data, "projects": stored})
 
     # -- lookup -------------------------------------------------------------
     def by_path(self, folder_path: Any) -> dict[str, Any] | None:
@@ -344,11 +395,13 @@ class ProjectRegistry:
         existing = self.by_path(folder)
         if existing:
             existing.update(describe(str(folder)))
+            self._locate_new(existing)
             self.write()
             return existing
         project = {"id": uuid.uuid4().hex[:12], **describe(str(folder)),
                    "createdAt": datetime.now().isoformat(timespec="seconds"),
                    "createdBy": actor.get("email", ""), "designers": [], "verifiers": []}
+        self._locate_new(project)
         self.data["projects"][project["id"]] = project
         self.write()
         return project
@@ -368,6 +421,7 @@ class ProjectRegistry:
         project["folderPath"] = described["folderPath"]
         project["folderName"] = described["folderName"]
         project["group"] = described["group"]
+        self._locate_new(project)
         self.write()
         return project
 

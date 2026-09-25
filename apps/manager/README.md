@@ -9,16 +9,25 @@ verification process.
 start.bat                 →  http://127.0.0.1:8125/
 ```
 
-The service binds to localhost only and uses the Python standard library plus the optional
-`pypdf` package.
+By default the service binds to localhost and uses the Python standard library plus the
+optional `pypdf` package. It is also prepared to run as a tenant of the shared internal
+application host; see [Running on the application host](#running-on-the-application-host).
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
 | `ICM_ROOT` | `J:\Active Projects` | Projects root used for project discovery. |
+| `ICM_HOST` | `127.0.0.1` | Listening address. Anything but loopback is server mode. |
 | `ICM_PORT` | `8125` | Listening port. |
 | `ICM_DATA_DIR` | `./data` | People directory, project registry and folder index. |
-| `ICM_SSO_ENABLED` | `0` | Office 365 sign-on. **Leave at 0.** |
+| `ICM_BACKUP_DIR` | `../backups` beside the data folder | Snapshots of the data folder. |
+| `ICM_SSO_ENABLED` | `0` | In-app Office 365 sign-on. **Leave at 0.** |
 | `ICM_SSO_TENANT`, `ICM_SSO_CLIENT_ID` | – | Entra ID application, needed only when SSO is enabled. |
+
+The deployment settings (`ICM_AUTH_MODE`, `ICM_TRUSTED_PROXIES`, `ICM_ALLOWED_HOSTS`,
+`ICM_HTTPS`, `ICM_READ_ONLY`, `ICM_TAB_ACCESS`, `ICM_MODULE_ACCESS`, `ICM_ADMINS`, backup
+interval and retention, `INNOCALC_BROWSER`) are described in
+[`../../.env.example`](../../.env.example). An invalid value stops the service at start with
+the reason.
 
 ---
 
@@ -158,9 +167,21 @@ with links to the package.
   every project in your list — the basis for the future business-wide QA review.
 
 ### Sign-in
-There are no passwords anywhere in this release. You identify yourself with your Innovis
-email address; the directory keeps your display name and initials so calculations stay
-attributable.
+There are no passwords or email addresses anywhere in this release. Choose your name from the
+list, or press **Create a new username** and give your full name and initials; the directory
+keeps your display name and initials so calculations stay attributable. Internally a new user
+is keyed `first.last@innovis.com.au`, which Office 365 sign-on confirms or corrects later.
+
+### Feedback
+The **Feedback** page lists every bug report and improvement request (`data/feedback.json`,
+numbered `BUG-0001` / `IMP-0001`). Anyone signed in can raise one - the page, module, project
+and version are attached automatically - and press **Me too** on someone else's. Admins set
+status and priority, reply to the reporter and export the list to CSV.
+
+### Moving to the server
+`python -m icm.merge <PC data folders> --into <data> [--apply]` combines every PC's project list
+and people directory; `python -m icm.merge --libraries` rewrites a PC's project files so they
+hold no Windows paths. See [docs/DOCKER-DEPLOYMENT.md](../../docs/DOCKER-DEPLOYMENT.md).
 
 Office 365 single sign-on is fully written in `icm/auth.py` — configuration, PKCE, the
 authorise URL and the redirect handler — and is **deliberately inactive**. To demonstrate it:
@@ -174,17 +195,111 @@ set ICM_SSO_CLIENT_ID=<application id>
 with `http://127.0.0.1:8125/auth/sso/callback` registered as a redirect URI. Nothing else in
 the application changes.
 
+On the application host, sign-in is not done by the manager at all: `ICM_AUTH_MODE=proxy`
+takes the signed-in address from the reverse proxy (see below), and the in-app flow must stay
+off.
+
+---
+
+## Running on the application host
+
+The manager is prepared to run as one tenant on the shared internal application host: a
+**production** instance and a **preview** instance behind a TLS-terminating reverse proxy that
+later performs Entra ID sign-in for every application. The container build and deployment
+scripts are the next step and are not in this repository yet; the gap assessment in
+[`docs/DEPLOYMENT-GAP-ASSESSMENT.md`](../../docs/DEPLOYMENT-GAP-ASSESSMENT.md) lists what
+remains.
+
+### Network placement
+The service is designed for **office LAN and VPN access only, behind the reverse proxy**. It
+must never be published to the internet or reached directly: the container publishes no
+ports, and
+
+* `ICM_TRUSTED_PROXIES` names the proxy (`172.30.0.2` on the host). Only that peer may set
+  `X-Forwarded-Proto` / `X-Forwarded-Host`, which the manager uses for redirects; from anyone
+  else they are ignored and the real peer address is kept.
+* In `ICM_AUTH_MODE=proxy` the signed-in address arrives on `ICM_SSO_USER_HEADER`
+  (`X-Ms-Client-Principal-Name`). A request carrying that header from any other peer is
+  refused with 401 and logged. The proxy stripping client-supplied identity headers remains
+  the primary control; this is the backstop.
+* `ICM_ALLOWED_HOSTS` rejects any other `Host` header with 400 - including a health probe
+  that does not send the site's hostname.
+* `ICM_HTTPS=true` adds `Strict-Transport-Security` (the proxy sends it too; harmless).
+* With a non-loopback `ICM_HOST` the desktop helpers are withdrawn - the folder picker,
+  opening Explorer and opening a browser run on the server, not the user's PC - and every path
+  a browser supplies (new project, relink, PDF import, markups, drawings, folder browsing) must
+  lie under `ICM_ROOT`, so the server's own files cannot be listed or copied into a project.
+* `ICM_AUTH_MODE=dev` on a non-loopback address is allowed for early trials but logs a
+  warning: anyone who can reach it may sign in as any Innovis address.
+
+### Preview instances
+Preview runs the next release against a copy of production's data folder:
+
+* `ICM_READ_ONLY=true` makes every route that writes to the projects share return **409**
+  *"This instance is read-only (a preview on a copy of production); save in production."*
+  Calculating, browsing the index and previewing packages still work; verifier returns are
+  not scanned. The toolbar shows a read-only notice and disables Save. Mount the projects
+  share read-only for preview as well - the setting is the application's half of the rule.
+* Preview's data folder is replaced from production's newest snapshot (below).
+
+### Tabs and modules that are not ready for everyone
+Unfinished work ships in production but stays invisible until a setting changes, rather than
+living on a branch:
+
+* `ICM_TAB_ACCESS=package=admin,qa=admin` withholds tabs (`library`, `calculation`,
+  `package`, `qa`) from all but admins. **This is the default while PDF export is unproven**
+  (see ROADMAP.md); set `ICM_TAB_ACCESS=package=user,qa=user` to open them. The sign-in reply lists the permitted tabs, the
+  browser hides the others and never opens a hidden view, and the routes behind each tab
+  return **403** to anyone else. Project lists, the module catalogue and opening one saved
+  calculation are never gated.
+* `ICM_MODULE_ACCESS=concrete-corbel=admin` does the same for an enabled calculation module:
+  it is left out of the catalogue and its schema, calculate, save, action, validate and link
+  routes return 403. The module must still be enabled in `suite.toml`.
+* Admins are `ICM_ADMINS` plus anyone marked `admin` in `people.json`.
+
+### Health
+`GET /api/health` needs no sign-in. It returns **200** with `status` `ok` or `degraded`
+(projects root unreachable, a module failed to load, no Chromium, or the last backup failed)
+and **503** with `status: "unavailable"` when the data folder cannot be written. The reply
+includes the non-secret configuration.
+
+### Backups and restore
+Calculations, revisions and QA records live in the project folders and are protected by the
+projects share's own backups. The manager's data folder - people, registry, discovery index -
+is snapshotted **30 seconds after every start and then every `ICM_BACKUP_INTERVAL_MINUTES`**
+to `ICM_BACKUP_DIR` as `innocalc-<UTC stamp>.tar.gz`, with SHA-256 hashes in
+`manifest.jsonl`. Every JSON file is checked before it is archived; snapshots older than
+`ICM_BACKUP_RETENTION_DAYS` are pruned. From `apps/manager`:
+
+```
+python -m icm.backup create
+python -m icm.backup restore <innocalc-….tar.gz> [--data-dir DIR] [--force]
+```
+
+Restore verifies the hash and every file, refuses any unsafe archive entry, and **refuses
+outright while a manager is running against the folder** (it holds `manager.lock`; `--force`
+never overrides this). `--force` only accepts left-over `*.tmp` files from an interrupted
+write. The replaced files are kept in `.pre-restore-<stamp>` inside the data folder. Exit
+codes: 0 restored, 1 refused, 2 snapshot failed verification. A second manager started
+against a data folder that is already in use also refuses to start.
+
+### PDF printing on Linux
+Chromium is found at the usual Linux locations or at `INNOCALC_BROWSER`;
+`INNOCALC_BROWSER_ARGS` adds flags such as `--no-sandbox` where the container requires them.
+
 ---
 
 ## API
 
-All JSON, localhost only, `token` carried in the body or query string.
+All JSON, `token` carried in the body or query string (ignored in proxy sign-in mode). A
+withheld tab or module returns 403 and a write on a read-only instance returns 409.
 
 | Method | Route | Purpose |
 |--------|-------|---------|
+| GET | `/api/health` | Unauthenticated health: 200 ok/degraded, 503 unavailable. |
 | GET | `/api/ping` | Version, projects root, loaded modules, PDF tooling, sign-in mode. |
 | GET | `/api/auth/config` | Sign-in mode and the people directory. |
-| POST | `/api/auth/signin` `/api/auth/signout` | Session. |
+| POST | `/api/auth/signin` `/api/auth/signout` | Session, permitted tabs, role, read-only flag. |
 | GET | `/api/modules` | Loaded modules, their discipline branches, and any that failed to load. |
 | GET | `/api/module/schema?module=` | Input schema and defaults. |
 | GET | `/api/projects` | Your projects plus discovery status. |
@@ -199,7 +314,7 @@ All JSON, localhost only, `token` carried in the body or query string.
 | GET | `/api/qa?project=` `/api/qa/status` | Verification record; reads verifier returns. |
 | POST | `/api/qa/create` `update` `comment/add` `comment/update` `markups` `endorse` `export` `scan` | Verification workflow. |
 | GET | `/api/file?path=` | Stream a generated file. Restricted to registered project folders. |
-| GET | `/api/browse` `/api/files` `/api/pick` `/api/reveal` | Filesystem helpers; `reveal` opens Explorer. |
+| GET | `/api/browse` `/api/files` `/api/pick` `/api/reveal` | Filesystem helpers; `reveal` opens Explorer. On the server, confined to the projects root; `pick` and `reveal` are unavailable. |
 
 ---
 

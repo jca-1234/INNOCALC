@@ -66,6 +66,13 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(f"Release blocked: uncommitted changes in {repository}")
             revision = subprocess.run(["git", "-C", str(repository), "rev-parse", "HEAD"],
                                       capture_output=True, text=True, check=True, timeout=20)
+            if repository != root:
+                # A pinned submodule commit that was never pushed cannot be cloned into an image.
+                pushed = subprocess.run(["git", "-C", str(repository), "branch", "-r",
+                                         "--contains", "HEAD"],
+                                        capture_output=True, text=True, check=True, timeout=20)
+                if not pushed.stdout.strip():
+                    raise ValueError(f"Release blocked: {repository} HEAD is not pushed to its remote")
             revisions.append({"path": repository.relative_to(root).as_posix(), "commit": revision.stdout.strip()})
         document = json.dumps({"schema": 1, "repositories": revisions, "modules": manifest["modules"]}, indent=2)
         if arguments.output:

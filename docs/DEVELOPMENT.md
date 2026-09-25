@@ -85,28 +85,25 @@ fixed-date HTML hash. Also run module validation and a save/reopen/PDF check.
 
 ## Repository Ownership
 
-There are currently four independent repositories, not Git submodules. The suite
-root ignores the existing module repositories. Do not remove their `.git` folders
-or flatten their uncommitted work. To reproduce this development workspace, obtain
-the suite plus all three module repositories at the paths named by `suite.toml`.
+Steel (`calculations/steel/member`), Concrete Column (`calculations/concrete/column`) and
+Calculation Pad (`calculations/general/calculation_pad`) are **Git submodules** pinned in
+`.gitmodules`, each keeping its own history. Clone with `git clone --recurse-submodules`, or
+run `git submodule update --init --recursive` (`setup.bat` does this when they are missing).
+Work inside a module repository as normal, commit and push it, then commit the updated pointer
+in the suite so the release records exactly which module commit it ships.
 
-New modules use the root repository. Consolidation of the old repository histories
-is a separate Git operation after the local changes have been reviewed and committed.
-No Git history was rewritten by the layout pilot.
-
-The legacy repositories were moved intact, not merged into the root repository.
-The root `.gitignore` explicitly excludes those three paths. New calculation
-folders remain part of the root repository. Source-folder names are not project
-filing names: the latter are unchanged in `suite.toml`.
+New modules use the root repository. Do not remove the module repositories' `.git` folders
+or flatten their uncommitted work. Source-folder names are not project filing names: the
+latter are unchanged in `suite.toml`.
 
 ```
 python -m tooling release-check --output artifacts/suite-release.json
 ```
 
-This refuses dirty repositories and records each repository commit plus the module
-manifest. It does not commit, fetch or publish. A release must retain these exact
-source revisions, the dependency locks, test results and reference evidence.
-The output is release provenance, not an automated multi-repository checkout tool.
+This refuses dirty repositories and module commits that are not pushed to their remote, and
+records each repository commit plus the module manifest. It does not commit, fetch or publish.
+A release must retain these exact source revisions, the dependency locks, test results and
+reference evidence.
 
 ## Dependency Policy
 
@@ -117,9 +114,8 @@ module validation. Editable installations use the pinned local build tools with
 but must not install them. Optional notebook-only packages are not required to run
 the manager; install them explicitly in the notebook environment when needed.
 
-The shared GitHub Actions workflow runs storage, snapshot and scaffold tests on
-Windows and Linux. Full module integration runs locally with all four repositories;
-the root checkout alone does not contain those private module sources.
+The shared GitHub Actions workflow checks out the submodules and runs storage, snapshot,
+scaffold, feedback and portable-path tests on Windows and Linux.
 
 ## Housekeeping
 

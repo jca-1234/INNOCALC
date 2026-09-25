@@ -1,14 +1,54 @@
 """Version register for InnoCalc Manager.
 
-The newest entry is first.  Bump ``VERSION`` and add an entry for every change
-that reaches a user.
+Versions are ``vMajor.Patch.Minor`` (packages/innocalc_sdk/versioning.py).  The
+newest entry is first; bump ``VERSION`` and add an entry for every change that
+reaches a user.  Entries before v0.0.1 keep their old numbers, marked legacy.
 """
 
-VERSION = "V0.03"
+VERSION = "v0.0.1"
 
 VERSION_HISTORY = [
     {
-        "version": "V0.03",
+        "version": "v0.0.1",
+        "date": "2026-09-24",
+        "author": "JA",
+        "summary": "Numbering restarted at v0.0.1 (vMajor.Patch.Minor) for the software and "
+                   "every calculation module, and the application is now called InnoCalc.",
+        "changes": [
+            "Show superseded on the Calculation Index now lists every earlier revision, "
+            "greyed, beneath the current one, with its PDF, folder and a View link.",
+            "Projects opens as its own page instead of a pop-up window.",
+            "Sign in by choosing your name from a list, or create a new username; no email "
+            "address is asked for until Office 365 sign-on arrives on the server.",
+            "Feedback page: report a bug or suggest an improvement, see what others have "
+            "raised and add 'Me too'; admins triage, respond and export to CSV.",
+            "Package Export and Verification are limited to admins until PDF export passes "
+            "its check.",
+            "New InnoCalc visual style, matching InnoResource.",
+            "Nothing stored holds a Windows drive letter any more, ready for the server; "
+            "'python -m icm.merge' combines every PC's project list and people.",
+            "Steel, Concrete Column and Calculation Pad are pinned in the suite as submodules.",
+        ],
+    },
+    {
+        "version": "legacy V0.04",
+        "date": "2026-09-24",
+        "author": "JA",
+        "summary": "Prepared to run on the shared application server behind the reverse "
+                   "proxy; no change when run from your PC.",
+        "changes": [
+            "A preview copy is read-only: saving and every other write to the projects "
+            "drive is refused, and the toolbar says so.",
+            "Tabs and calculation modules that are not ready can be limited to admins by a "
+            "setting rather than held back in code.",
+            "On the server the folder picker and Explorer are unavailable and every folder "
+            "must be under the projects root.",
+            "The manager's own data is backed up automatically and can be restored with a "
+            "checked command; a health page reports whether the service is usable.",
+        ],
+    },
+    {
+        "version": "legacy V0.03",
         "date": "2026-09-02",
         "author": "JA",
         "summary": "Fixed the 'Server error (200)' raised when opening or calculating a "
@@ -21,7 +61,7 @@ VERSION_HISTORY = [
         ],
     },
     {
-        "version": "V0.02",
+        "version": "legacy V0.02",
         "date": "2026-09-01",
         "author": "JA",
         "summary": "Head unit changes: faster saving, a navigable module tree, a working "
@@ -69,7 +109,7 @@ VERSION_HISTORY = [
         ],
     },
     {
-        "version": "V0.01",
+        "version": "legacy V0.01",
         "date": "2026-09-01",
         "author": "JA",
         "summary": "First release of the calculation management head application.",

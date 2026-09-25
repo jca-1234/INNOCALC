@@ -17,14 +17,15 @@ from __future__ import annotations
 
 from .notation import badge, esc, force, moment, notation, number
 from .export import browser_path, export_pdf
-from .sheet import (SHEET_CAPACITY, grid, identity, logo_data_uri, pack_pages, page,
-                    prose, render, row, stylesheet, table, theme_css)
+from .sheet import (SHEET_CAPACITY, figure, grid, identity, logo_data_uri, matrix,
+                    pack_pages, page, prose, render, row, stylesheet, table, theme_css)
 
 __all__ = [
     "badge", "esc", "force", "moment", "notation", "number",
     "browser_path", "export_pdf",
-    "SHEET_CAPACITY", "grid", "identity", "logo_data_uri", "pack_pages", "page",
+    "SHEET_CAPACITY", "figure", "grid", "identity", "logo_data_uri", "matrix",
+    "pack_pages", "page",
     "prose", "render", "row", "stylesheet", "table", "theme_css",
 ]
 
-VERSION = "V0.01"
+VERSION = "v0.0.1"
